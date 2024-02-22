@@ -4,7 +4,7 @@ use proc_macro2::{
     Span, TokenStream,
     TokenTree::{self, *},
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 // index opcodes by identifier string
 lazy_static! {
@@ -62,11 +62,17 @@ pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
         syntax.push(match (&token, token_str.as_ref()) {
             // identifier, look up opcode
             (Ident(_), _) => {
-                let opcode = OPCODES.get(&token_str).unwrap_or_else(|| {
-                    emit_error!(token.span(), "unknown opcode \"{}\"", token_str);
-                });
-                (Syntax::Opcode(*opcode), token.span())
-            }
+                match OPCODES.get(&token_str) {
+                    Some(opcode) => {
+                        (Syntax::Opcode(*opcode), token.span())
+                    },
+                    None => {
+                        let mut pseudo_stream = TokenStream::from(token.clone());
+                        pseudo_stream.extend(TokenStream::from_str("()"));
+                        (Syntax::Escape(pseudo_stream), token.span())
+                    },
+                }
+            },
 
             // '<', start of escape (parse until first '>')
             (Punct(_), "<") => parse_escape(token, &mut tokens),
