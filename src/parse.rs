@@ -1,4 +1,4 @@
-use bitcoin::blockdata::opcodes::All as Opcode;
+use bitcoin::blockdata::opcodes::Opcode;
 use lazy_static::lazy_static;
 use proc_macro2::{
     Span, TokenStream,

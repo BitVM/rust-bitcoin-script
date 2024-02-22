@@ -1,5 +1,5 @@
 use super::parse::Syntax;
-use bitcoin::blockdata::opcodes::All as Opcode;
+use bitcoin::blockdata::opcodes::Opcode;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, quote_spanned};
 
@@ -51,20 +51,18 @@ fn generate_escape(builder: TokenStream, expression: TokenStream, span: Span) ->
             #[allow(clippy::all)]
             mod __ {
                 use ::bitcoin::blockdata::script::Builder;
+                use ::bitcoin::blockdata::opcodes::Opcode;
 
                 pub(super) trait Pushable {
                     fn bitcoin_script_push(&self, builder: Builder) -> Builder;
                 }
 
-                impl Pushable for &[u8] {
-                    fn bitcoin_script_push(&self, builder: Builder) -> Builder {
-                        builder.push_slice(self)
-                    }
-                }
-
-                impl Pushable for Vec<u8> {
-                    fn bitcoin_script_push(&self, builder: Builder) -> Builder {
-                        builder.push_slice(self.as_ref())
+                impl Pushable for Vec<Opcode> {
+                    fn bitcoin_script_push(&self, mut builder: Builder) -> Builder {
+                        for opcode in self.iter() {
+                            builder = builder.push_opcode(*opcode);
+                        }
+                        builder
                     }
                 }
 
