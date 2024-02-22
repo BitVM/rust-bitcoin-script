@@ -54,11 +54,11 @@ fn generate_escape(builder: TokenStream, expression: TokenStream, span: Span) ->
                 use ::bitcoin::blockdata::opcodes::Opcode;
 
                 pub(super) trait Pushable {
-                    fn bitcoin_script_push(&self, builder: Builder) -> Builder;
+                    fn bitcoin_script_push(self, builder: Builder) -> Builder;
                 }
 
                 impl Pushable for Vec<Opcode> {
-                    fn bitcoin_script_push(&self, mut builder: Builder) -> Builder {
+                    fn bitcoin_script_push(self, mut builder: Builder) -> Builder {
                         for opcode in self.iter() {
                             builder = builder.push_opcode(*opcode);
                         }
@@ -67,14 +67,20 @@ fn generate_escape(builder: TokenStream, expression: TokenStream, span: Span) ->
                 }
 
                 impl Pushable for i64 {
-                    fn bitcoin_script_push(&self, builder: Builder) -> Builder {
-                        builder.push_int(*self)
+                    fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                        builder.push_int(self)
                     }
                 }
 
                 impl Pushable for ::bitcoin::PublicKey {
-                    fn bitcoin_script_push(&self, builder: Builder) -> Builder {
+                    fn bitcoin_script_push(self, builder: Builder) -> Builder {
                         builder.push_key(&self)
+                    }
+                }
+
+                impl Pushable for ::bitcoin::ScriptBuf {
+                    fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                        Builder::from([builder.into_bytes(), self.into_bytes()].concat())
                     }
                 }
 
