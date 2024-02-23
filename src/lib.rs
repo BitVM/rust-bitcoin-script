@@ -131,11 +131,11 @@ pub fn bitcoin_script(tokens: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn define_pushable(_: TokenStream) -> TokenStream {
     quote!(
-        mod pushable {
+        pub mod pushable {
             use ::bitcoin::blockdata::script::Builder;
             use ::bitcoin::blockdata::opcodes::Opcode;
 
-            pub(super) trait Pushable {
+            pub trait Pushable {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder;
             }
 
