@@ -127,3 +127,63 @@ pub fn bitcoin_script(tokens: TokenStream) -> TokenStream {
     set_dummy(quote!((::bitcoin::Script::new())));
     generate(parse(tokens.into())).into()
 }
+
+#[proc_macro]
+pub fn define_pushable(_: TokenStream) -> TokenStream {
+    quote!(
+        mod pushable {
+            use ::bitcoin::blockdata::script::Builder;
+            use ::bitcoin::blockdata::opcodes::Opcode;
+
+            pub(super) trait Pushable {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder;
+            }
+
+            impl Pushable for Opcode {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_opcode(self)
+                }
+            }
+
+            impl Pushable for i64 {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_int(self)
+                }
+            }
+
+            impl Pushable for i32 {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_int(self as i64)
+                }
+            }
+
+            impl Pushable for u32 {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_int(self as i64)
+                }
+            }
+
+            impl Pushable for ::bitcoin::PublicKey {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_key(&self)
+                }
+            }
+
+            impl Pushable for ::bitcoin::ScriptBuf {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    Builder::from([builder.into_bytes(), self.into_bytes()].concat())
+                }
+            }
+            
+            impl<T: Pushable> Pushable for Vec<T> {
+                fn bitcoin_script_push(self, mut builder: Builder) -> Builder {
+                    for pushable in self {
+                        builder = pushable.bitcoin_script_push(builder);
+                    }
+                    builder
+                }
+            }
+        }
+    ).into()
+}
+
