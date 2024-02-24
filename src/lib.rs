@@ -132,49 +132,48 @@ pub fn bitcoin_script(tokens: TokenStream) -> TokenStream {
 pub fn define_pushable(_: TokenStream) -> TokenStream {
     quote!(
         pub mod pushable {
-            use ::bitcoin::blockdata::script::Builder;
-            use ::bitcoin::blockdata::opcodes::Opcode;
 
+            use ::bitcoin::blockdata::opcodes::Opcode;
+            use ::bitcoin::blockdata::script::Builder;
+            use ::bitcoin::blockdata::script::PushBytesBuf;
             pub trait Pushable {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder;
             }
-
             impl Pushable for Opcode {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_opcode(self)
                 }
             }
-
             impl Pushable for i64 {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_int(self)
                 }
             }
-
             impl Pushable for i32 {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_int(self as i64)
                 }
             }
-
             impl Pushable for u32 {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_int(self as i64)
                 }
             }
-
+            impl Pushable for Vec<u8> {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_slice(PushBytesBuf::try_from(self).unwrap())
+                }
+            }
             impl Pushable for ::bitcoin::PublicKey {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_key(&self)
                 }
             }
-
             impl Pushable for ::bitcoin::ScriptBuf {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     Builder::from([builder.into_bytes(), self.into_bytes()].concat())
                 }
             }
-            
             impl<T: Pushable> Pushable for Vec<T> {
                 fn bitcoin_script_push(self, mut builder: Builder) -> Builder {
                     for pushable in self {
@@ -184,6 +183,6 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                 }
             }
         }
-    ).into()
+    )
+    .into()
 }
-

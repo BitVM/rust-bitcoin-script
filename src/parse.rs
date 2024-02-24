@@ -79,6 +79,9 @@ pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
             // '<', start of escape (parse until first '>')
             (Punct(_), "<") => parse_escape(token, &mut tokens),
 
+            // '~' start of escape (parse until the next '~') ignores '<' and '>'
+            (Punct(_), "~") => parse_escape_extra(token, &mut tokens),
+
             // literal, push data (int or bytes)
             (Literal(_), _) => parse_data(token),
 
@@ -118,6 +121,33 @@ where
 
     (Syntax::Escape(escape), span)
 }
+
+fn parse_escape_extra<T>(token: TokenTree, tokens: &mut T) -> (Syntax, Span)
+where
+    T: Iterator<Item = TokenTree>,
+{
+    let mut escape = TokenStream::new();
+    let mut span = token.span();
+
+    loop {
+        let token = tokens
+            .next()
+            .unwrap_or_else(|| abort!(token.span(), "unterminated escape"));
+        let token_str = token.to_string();
+
+        span = span.join(token.span()).unwrap_or(token.span());
+
+        // end of escape
+        if let (Punct(_), "~") = (&token, token_str.as_ref()) {
+            break;
+        }
+
+        escape.extend(TokenStream::from(token));
+    }
+
+    (Syntax::Escape(escape), span)
+}
+
 
 fn parse_data(token: TokenTree) -> (Syntax, Span) {
     if token.to_string().starts_with("0x") {
