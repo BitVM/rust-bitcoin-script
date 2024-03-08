@@ -19,8 +19,9 @@
 //! ```rust
 //! #![feature(proc_macro_hygiene)]
 //!
-//! use bitcoin_script::bitcoin_script;
+//! use bitcoin_script::{bitcoin_script, define_pushable};
 //!
+//! define_pushable!();
 //! # let digest = 0;
 //! # let seller_pubkey_hash = 0;
 //! # let buyer_pubkey_hash = 0;
@@ -90,17 +91,21 @@
 //!
 //! #### Escape Sequences
 //!
-//! Dynamic Rust expressions are supported inside the script, surrounded by angle brackets. In many cases, this will just be a variable identifier, but this can also be a function call or arithmetic.
+//! Dynamic Rust expressions are supported inside the script, surrounded by rust delimiters (e.g. "{ }" or "( )"), angle brackets ("< >") or tilde ("~ ~"). In many cases, this will just be a variable identifier, but this can also be a function call, closure or arithmetic.
 //!
 //! Rust expressions of the following types are supported:
 //!
-//! - `i64`
+//! - `i64`, `i32`, `u32`, 
 //! - `Vec<u8>`
-//! - [`bitcoin::PublicKey`](https://docs.rs/bitcoin/0.23.0/bitcoin/util/key/struct.PublicKey.html)
+//! - [`bitcoin::PublicKey`](https://docs.rs/bitcoin/latest/bitcoin/struct.PublicKey.html)
+//! - [`bitcoin::ScriptBuf`](https://docs.rs/bitcoin/latest/bitcoin/blockdata/script/struct.ScriptBuf.html)
+//! - And Vec<> variants of all the above types 
+//!
 //!
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
-//! # use bitcoin_script::bitcoin_script;
+//! # use bitcoin_script::{bitcoin_script, define_pushable};
+//! define_pushable!();
 //! let bytes = vec![1, 2, 3];
 //!
 //! let script = bitcoin_script! {
