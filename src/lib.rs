@@ -133,9 +133,10 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
     quote!(
         pub mod pushable {
 
-            use ::bitcoin::blockdata::opcodes::Opcode;
-            use ::bitcoin::blockdata::script::Builder;
-            use ::bitcoin::blockdata::script::PushBytesBuf;
+            use std::convert::TryFrom;
+            use bitcoin::blockdata::opcodes::Opcode;
+            use bitcoin::blockdata::script::Builder;
+            use bitcoin::blockdata::script::PushBytesBuf;
             pub trait Pushable {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder;
             }
