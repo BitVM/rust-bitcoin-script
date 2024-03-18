@@ -1,11 +1,4 @@
-use bitcoin::{
-    blockdata::opcodes::Opcode,
-    opcodes::{
-        OP_0, OP_PUSHNUM_10, OP_PUSHNUM_11, OP_PUSHNUM_12, OP_PUSHNUM_13, OP_PUSHNUM_14,
-        OP_PUSHNUM_15, OP_PUSHNUM_16, OP_PUSHNUM_2, OP_PUSHNUM_3, OP_PUSHNUM_4, OP_PUSHNUM_5,
-        OP_PUSHNUM_6, OP_PUSHNUM_7, OP_PUSHNUM_8, OP_PUSHNUM_9, OP_TRUE,
-    },
-};
+use bitcoin::blockdata::opcodes::Opcode;
 use lazy_static::lazy_static;
 use proc_macro2::{
     Span, TokenStream,
@@ -160,33 +153,17 @@ where
 
 fn parse_data(token: TokenTree) -> (Syntax, Span) {
     if token.to_string().starts_with("0x") {
-        // Check if the encoded hex value is <= 16 so we can use optimized opcodes to push the data
-        // TODO: This should happen further down the line when we push a slice and it could
-        // instead be pushed with a single opcode.
-        match token
+        if token
             .to_string()
             .strip_prefix("0x")
             .unwrap_or_else(|| unreachable!())
             .trim_start_matches('0')
+            .len()
+            <= 8
         {
-            "" => (Syntax::Opcode(OP_0), token.span()),
-            "1" => (Syntax::Opcode(OP_TRUE), token.span()),
-            "2" => (Syntax::Opcode(OP_PUSHNUM_2), token.span()),
-            "3" => (Syntax::Opcode(OP_PUSHNUM_3), token.span()),
-            "4" => (Syntax::Opcode(OP_PUSHNUM_4), token.span()),
-            "5" => (Syntax::Opcode(OP_PUSHNUM_5), token.span()),
-            "6" => (Syntax::Opcode(OP_PUSHNUM_6), token.span()),
-            "7" => (Syntax::Opcode(OP_PUSHNUM_7), token.span()),
-            "8" => (Syntax::Opcode(OP_PUSHNUM_8), token.span()),
-            "9" => (Syntax::Opcode(OP_PUSHNUM_9), token.span()),
-            "a" => (Syntax::Opcode(OP_PUSHNUM_10), token.span()),
-            "b" => (Syntax::Opcode(OP_PUSHNUM_11), token.span()),
-            "c" => (Syntax::Opcode(OP_PUSHNUM_12), token.span()),
-            "d" => (Syntax::Opcode(OP_PUSHNUM_13), token.span()),
-            "e" => (Syntax::Opcode(OP_PUSHNUM_14), token.span()),
-            "f" => (Syntax::Opcode(OP_PUSHNUM_15), token.span()),
-            "10" => (Syntax::Opcode(OP_PUSHNUM_16), token.span()),
-            _ => parse_bytes(token),
+            parse_hex_int(token)
+        } else {
+            parse_bytes(token)
         }
     } else {
         parse_int(token, false)
@@ -199,6 +176,14 @@ fn parse_bytes(token: TokenTree) -> (Syntax, Span) {
         emit_error!(token.span(), "invalid hex literal ({})", err);
     });
     (Syntax::Bytes(bytes), token.span())
+}
+
+fn parse_hex_int(token: TokenTree) -> (Syntax, Span) {
+    let token_str = &token.to_string()[2..];
+    let n: u32 = u32::from_str_radix(token_str, 16).unwrap_or_else(|err| {
+        emit_error!(token.span(), "invalid hex string ({})", err);
+    });
+    (Syntax::Int(n as i64), token.span())
 }
 
 fn parse_int(token: TokenTree, negative: bool) -> (Syntax, Span) {
@@ -335,19 +320,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "invalid hex literal (Odd number of digits)")]
-    fn parse_invalid_hex() {
-        parse(quote!(OP_CHECKSIG 0x123));
-    }
-
-    #[test]
     fn parse_hex() {
-        let syntax = parse(quote!(OP_CHECKSIG 0x1234));
+        let syntax = parse(quote!(OP_CHECKSIG 0x123456789abcde));
 
         if let Syntax::Bytes(bytes) = &syntax[1].0 {
-            assert_eq!(bytes, &vec![0x12, 0x34]);
+            assert_eq!(bytes, &vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde]);
         } else {
-            panic!()
+            panic!("Unable to cast Syntax as Syntax::Bytes")
         }
     }
 }
