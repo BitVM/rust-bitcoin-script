@@ -1,4 +1,11 @@
-use bitcoin::blockdata::opcodes::Opcode;
+use bitcoin::{
+    blockdata::opcodes::Opcode,
+    opcodes::{
+        OP_0, OP_PUSHNUM_10, OP_PUSHNUM_11, OP_PUSHNUM_12, OP_PUSHNUM_13, OP_PUSHNUM_14,
+        OP_PUSHNUM_15, OP_PUSHNUM_16, OP_PUSHNUM_2, OP_PUSHNUM_3, OP_PUSHNUM_4, OP_PUSHNUM_5,
+        OP_PUSHNUM_6, OP_PUSHNUM_7, OP_PUSHNUM_8, OP_PUSHNUM_9, OP_TRUE,
+    },
+};
 use lazy_static::lazy_static;
 use proc_macro2::{
     Span, TokenStream,
@@ -63,18 +70,16 @@ pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
             // identifier, look up opcode
             (Ident(_), _) => {
                 match OPCODES.get(&token_str) {
-                    Some(opcode) => {
-                        (Syntax::Opcode(*opcode), token.span())
-                    },
+                    Some(opcode) => (Syntax::Opcode(*opcode), token.span()),
                     // Not a native Bitcoin opcode
                     // Allow functions without arguments to be identified by just their name
                     None => {
                         let mut pseudo_stream = TokenStream::from(token.clone());
                         pseudo_stream.extend(TokenStream::from_str("()"));
                         (Syntax::Escape(pseudo_stream), token.span())
-                    },
+                    }
                 }
-            },
+            }
 
             (Group(inner), _) => {
                 let escape = TokenStream::from(inner.stream().clone());
@@ -153,10 +158,36 @@ where
     (Syntax::Escape(escape), span)
 }
 
-
 fn parse_data(token: TokenTree) -> (Syntax, Span) {
     if token.to_string().starts_with("0x") {
-        parse_bytes(token)
+        // Check if the encoded hex value is <= 16 so we can use optimized opcodes to push the data
+        // TODO: This should happen further down the line when we push a slice and it could
+        // instead be pushed with a single opcode.
+        match token
+            .to_string()
+            .strip_prefix("0x")
+            .unwrap_or_else(|| unreachable!())
+            .trim_start_matches('0')
+        {
+            "" => (Syntax::Opcode(OP_0), token.span()),
+            "1" => (Syntax::Opcode(OP_TRUE), token.span()),
+            "2" => (Syntax::Opcode(OP_PUSHNUM_2), token.span()),
+            "3" => (Syntax::Opcode(OP_PUSHNUM_3), token.span()),
+            "4" => (Syntax::Opcode(OP_PUSHNUM_4), token.span()),
+            "5" => (Syntax::Opcode(OP_PUSHNUM_5), token.span()),
+            "6" => (Syntax::Opcode(OP_PUSHNUM_6), token.span()),
+            "7" => (Syntax::Opcode(OP_PUSHNUM_7), token.span()),
+            "8" => (Syntax::Opcode(OP_PUSHNUM_8), token.span()),
+            "9" => (Syntax::Opcode(OP_PUSHNUM_9), token.span()),
+            "a" => (Syntax::Opcode(OP_PUSHNUM_10), token.span()),
+            "b" => (Syntax::Opcode(OP_PUSHNUM_11), token.span()),
+            "c" => (Syntax::Opcode(OP_PUSHNUM_12), token.span()),
+            "d" => (Syntax::Opcode(OP_PUSHNUM_13), token.span()),
+            "e" => (Syntax::Opcode(OP_PUSHNUM_14), token.span()),
+            "f" => (Syntax::Opcode(OP_PUSHNUM_15), token.span()),
+            "10" => (Syntax::Opcode(OP_PUSHNUM_16), token.span()),
+            _ => parse_bytes(token),
+        }
     } else {
         parse_int(token, false)
     }
