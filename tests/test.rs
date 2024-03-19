@@ -24,6 +24,31 @@ fn test_generic() {
 }
 
 #[test]
+fn test_pushable_vectors() {
+    define_pushable!();
+    let byte_vec = vec![vec![1, 2, 3, 4], vec![5, 6, 7, 8]];
+    let script_vec = vec![
+        bitcoin_script! {
+            OP_ADD
+        },
+        bitcoin_script! {
+            OP_TRUE
+            OP_FALSE
+        },
+    ];
+
+    let script = bitcoin_script! (
+        {byte_vec}
+        {script_vec}
+    );
+
+    assert_eq!(
+        script.to_bytes(),
+        vec![81, 82, 83, 84, 85, 86, 87, 88, 147, 81, 0]
+    );
+}
+
+#[test]
 fn test_minimal_byte_opcode() {
     define_pushable!();
     let script = bitcoin_script! (
@@ -48,5 +73,4 @@ fn test_minimal_byte_opcode() {
         script.to_bytes(),
         vec![0, 0, 81, 82, 83, 84, 85, 86, 87, 88, 89, 96, 1, 17, 2, 210, 0, 2, 210, 0]
     );
-
 }

@@ -95,11 +95,11 @@
 //!
 //! Rust expressions of the following types are supported:
 //!
-//! - `i64`, `i32`, `u32`, 
+//! - `i64`, `i32`, `u32`,
 //! - `Vec<u8>`
 //! - [`bitcoin::PublicKey`](https://docs.rs/bitcoin/latest/bitcoin/struct.PublicKey.html)
 //! - [`bitcoin::ScriptBuf`](https://docs.rs/bitcoin/latest/bitcoin/blockdata/script/struct.ScriptBuf.html)
-//! - And Vec<> variants of all the above types 
+//! - And Vec<> variants of all the above types
 //!
 //!
 //! ```rust
@@ -138,54 +138,72 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
     quote!(
         pub mod pushable {
 
-            use std::convert::TryFrom;
             use bitcoin::blockdata::opcodes::Opcode;
             use bitcoin::blockdata::script::Builder;
             use bitcoin::blockdata::script::PushBytesBuf;
-            pub trait Pushable {
+            use std::convert::TryFrom;
+
+            // We split up the bitcoin_script_push function to allow pushing a single u8 value as
+            // an integer (i64), Vec<u8> as raw data and Vec<T> for any T: Pushable object that is
+            // not a u8. Otherwise the Vec<u8> and Vec<T: Pushable> definitions conflict.
+            trait NotU8Pushable {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder;
             }
-            impl Pushable for Opcode {
+            impl NotU8Pushable for Opcode {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_opcode(self)
                 }
             }
-            impl Pushable for i64 {
+            impl NotU8Pushable for i64 {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_int(self)
                 }
             }
-            impl Pushable for i32 {
+            impl NotU8Pushable for i32 {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_int(self as i64)
                 }
             }
-            impl Pushable for u32 {
+            impl NotU8Pushable for u32 {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_int(self as i64)
                 }
             }
-            impl Pushable for Vec<u8> {
+            impl NotU8Pushable for Vec<u8> {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_slice(PushBytesBuf::try_from(self).unwrap())
                 }
             }
-            impl Pushable for ::bitcoin::PublicKey {
+            impl NotU8Pushable for ::bitcoin::PublicKey {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_key(&self)
                 }
             }
-            impl Pushable for ::bitcoin::ScriptBuf {
+            impl NotU8Pushable for ::bitcoin::ScriptBuf {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     Builder::from([builder.into_bytes(), self.into_bytes()].concat())
                 }
             }
-            impl<T: Pushable> Pushable for Vec<T> {
+            impl<T: NotU8Pushable> NotU8Pushable for Vec<T> {
                 fn bitcoin_script_push(self, mut builder: Builder) -> Builder {
                     for pushable in self {
                         builder = pushable.bitcoin_script_push(builder);
                     }
                     builder
+                }
+            }
+            pub trait Pushable {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder;
+            }
+            impl<T: NotU8Pushable> Pushable for T {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    NotU8Pushable::bitcoin_script_push(self, builder)
+                }
+            }
+
+            impl Pushable for u8 {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_int(self as i64)
                 }
             }
         }
