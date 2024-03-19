@@ -49,6 +49,17 @@ fn test_pushable_vectors() {
 }
 
 #[test]
+#[should_panic]
+fn test_usize_conversion() {
+    define_pushable!();
+    let usize_value : usize = 0xFFFFFFFFFFFFFFFF;
+
+    let script = bitcoin_script! (
+        {usize_value}
+    );
+}
+
+#[test]
 fn test_minimal_byte_opcode() {
     define_pushable!();
     let script = bitcoin_script! (
