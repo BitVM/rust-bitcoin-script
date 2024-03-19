@@ -6,19 +6,6 @@ use proc_macro2::{
 };
 use std::{collections::HashMap, str::FromStr};
 
-// index opcodes by identifier string
-lazy_static! {
-    static ref OPCODES: HashMap<String, Opcode> = {
-        let mut map = HashMap::with_capacity(256);
-        for i in 0..=255 {
-            let opcode = Opcode::from(i);
-            let name = format!("{:?}", opcode);
-            map.insert(name, opcode);
-        }
-        map
-    };
-}
-
 #[derive(Debug)]
 pub enum Syntax {
     Opcode(Opcode),
@@ -62,11 +49,11 @@ pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
         syntax.push(match (&token, token_str.as_ref()) {
             // identifier, look up opcode
             (Ident(_), _) => {
-                match OPCODES.get(&token_str) {
-                    Some(opcode) => (Syntax::Opcode(*opcode), token.span()),
+                match Opcode::from_str(&token_str) {
+                    Ok(opcode) => (Syntax::Opcode(opcode), token.span()),
                     // Not a native Bitcoin opcode
                     // Allow functions without arguments to be identified by just their name
-                    None => {
+                    _ => {
                         let mut pseudo_stream = TokenStream::from(token.clone());
                         pseudo_stream.extend(TokenStream::from_str("()"));
                         (Syntax::Escape(pseudo_stream), token.span())
