@@ -103,7 +103,7 @@ where
                 let inner_block = block.stream();
                 escape.extend(quote! {
                     {
-                    script_var.push(bitcoin_script !{
+                    script_var.push(script !{
                         #inner_block
                     });
                     }

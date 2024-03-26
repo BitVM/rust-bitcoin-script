@@ -1,12 +1,12 @@
 #![feature(proc_macro_hygiene)]
 
-use bitcoin_script::{bitcoin_script, define_pushable};
+use bitcoin_script::{script, define_pushable};
 
 #[test]
 fn test_generic() {
     define_pushable!();
     let foo = vec![1, 2, 3, 4];
-    let script = bitcoin_script! (
+    let script = script! (
         OP_HASH160
         1234
         255
@@ -28,16 +28,16 @@ fn test_pushable_vectors() {
     define_pushable!();
     let byte_vec = vec![vec![1, 2, 3, 4], vec![5, 6, 7, 8]];
     let script_vec = vec![
-        bitcoin_script! {
+        script! {
             OP_ADD
         },
-        bitcoin_script! {
+        script! {
             OP_TRUE
             OP_FALSE
         },
     ];
 
-    let script = bitcoin_script! (
+    let script = script! (
         {byte_vec}
         {script_vec}
     );
@@ -54,7 +54,7 @@ fn test_usize_conversion() {
     define_pushable!();
     let usize_value : usize = 0xFFFFFFFFFFFFFFFF;
 
-    let _script = bitcoin_script! (
+    let _script = script! (
         {usize_value}
     );
 }
@@ -62,7 +62,7 @@ fn test_usize_conversion() {
 #[test]
 fn test_minimal_byte_opcode() {
     define_pushable!();
-    let script = bitcoin_script! (
+    let script = script! (
         0x00
         0x0
         0x1
@@ -89,7 +89,7 @@ fn test_minimal_byte_opcode() {
 #[test]
 fn test_for_loop() {
     define_pushable!();
-    let script = bitcoin_script! {
+    let script = script! {
         for i in 0..3 {
             for k in 0..3 {
             OP_ADD
