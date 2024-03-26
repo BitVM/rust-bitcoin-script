@@ -1,5 +1,6 @@
 use bitcoin::blockdata::opcodes::Opcode;
 use proc_macro2::{
+    Delimiter,
     Span, TokenStream,
     TokenTree::{self, *},
 };
@@ -99,7 +100,7 @@ where
 
     while let Some(for_token) = tokens.next() {
         match for_token {
-            Group(block) => {
+            Group(block) if block.delimiter() == Delimiter::Brace => {
                 let inner_block = block.stream();
                 escape.extend(quote! {
                     {
