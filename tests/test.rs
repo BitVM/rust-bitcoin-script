@@ -1,5 +1,6 @@
 #![feature(proc_macro_hygiene)]
 
+use bitcoin::ScriptBuf;
 use bitcoin_script::{bitcoin_script, define_pushable};
 
 #[test]
@@ -52,11 +53,15 @@ fn test_pushable_vectors() {
 #[should_panic]
 fn test_usize_conversion() {
     define_pushable!();
-    let usize_value : usize = 0xFFFFFFFFFFFFFFFF;
+    let usize_value: usize = 0xFFFFFFFFFFFFFFFF;
 
+<<<<<<< HEAD
     let _script = bitcoin_script! (
         {usize_value}
     );
+=======
+    let _script = script!({ usize_value });
+>>>>>>> 2892b2f (Fix: Parsing all tokens when parsing for loop)
 }
 
 #[test]
@@ -86,6 +91,10 @@ fn test_minimal_byte_opcode() {
     );
 }
 
+fn script_from_func() -> ScriptBuf {
+    return script! { OP_ADD };
+}
+
 #[test]
 fn test_for_loop() {
     define_pushable!();
@@ -93,14 +102,21 @@ fn test_for_loop() {
         for i in 0..3 {
             for k in 0..(3 as u32) {
             OP_ADD
+            script_from_func
+            OP_SWAP
             { i }
             { k }
             }
         }
+        OP_ADD
     };
 
     assert_eq!(
         script.to_bytes(),
-        vec![147, 0, 0, 147, 0, 81, 147, 0, 82, 147, 81, 0, 147, 81, 81, 147, 81, 82, 147, 82, 0, 147, 82, 81, 147, 82, 82]
+        vec![
+            147, 147, 124, 0, 0, 147, 147, 124, 0, 81, 147, 147, 124, 0, 82, 147, 147, 124, 81, 0,
+            147, 147, 124, 81, 81, 147, 147, 124, 81, 82, 147, 147, 124, 82, 0, 147, 147, 124, 82,
+            81, 147, 147, 124, 82, 82, 147
+        ]
     );
 }
