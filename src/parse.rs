@@ -110,6 +110,7 @@ where
                     }
                     script_var
                 });
+                break;
             }
             _ => {
                 escape.extend(std::iter::once(for_token));
