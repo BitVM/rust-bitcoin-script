@@ -171,7 +171,9 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
             }
             impl NotU8Pushable for usize {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                    builder.push_int(i64::try_from(self).unwrap_or_else(|_| panic!("Usize does not fit in i64")))
+                    builder.push_int(
+                        i64::try_from(self).unwrap_or_else(|_| panic!("Usize does not fit in i64")),
+                    )
                 }
             }
             impl NotU8Pushable for Vec<u8> {

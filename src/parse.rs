@@ -1,10 +1,10 @@
 use bitcoin::blockdata::opcodes::Opcode;
-use lazy_static::lazy_static;
 use proc_macro2::{
     Span, TokenStream,
     TokenTree::{self, *},
 };
-use std::{collections::HashMap, str::FromStr};
+use quote::quote;
+use std::str::FromStr;
 
 #[derive(Debug)]
 pub enum Syntax {
@@ -45,8 +45,10 @@ pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
 
     while let Some(token) = tokens.next() {
         let token_str = token.to_string();
-
         syntax.push(match (&token, token_str.as_ref()) {
+            // Wrap for loops such that they return a Vec<ScriptBuf>
+            (Ident(_), ident_str) if ident_str == "for" => parse_for_loop(token, &mut tokens),
+
             // identifier, look up opcode
             (Ident(_), _) => {
                 match Opcode::from_str(&token_str) {
@@ -84,6 +86,38 @@ pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
     }
 
     syntax
+}
+
+fn parse_for_loop<T>(token: TokenTree, tokens: &mut T) -> (Syntax, Span)
+where
+    T: Iterator<Item = TokenTree>,
+{
+    let mut escape = quote! {
+        let mut script_var = vec![];
+    };
+    escape.extend(std::iter::once(token.clone()));
+
+    while let Some(for_token) = tokens.next() {
+        match for_token {
+            Group(block) => {
+                let inner_block = block.stream();
+                escape.extend(quote! {
+                    {
+                    script_var.push(bitcoin_script !{
+                        #inner_block
+                    });
+                    }
+                    script_var
+                });
+            }
+            _ => {
+                escape.extend(std::iter::once(for_token));
+                continue;
+            }
+        };
+    }
+
+    (Syntax::Escape(quote!{ { #escape }}.into()), token.span())
 }
 
 fn parse_escape<T>(token: TokenTree, tokens: &mut T) -> (Syntax, Span)

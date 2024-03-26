@@ -54,7 +54,7 @@ fn test_usize_conversion() {
     define_pushable!();
     let usize_value : usize = 0xFFFFFFFFFFFFFFFF;
 
-    let script = bitcoin_script! (
+    let _script = bitcoin_script! (
         {usize_value}
     );
 }
@@ -83,5 +83,24 @@ fn test_minimal_byte_opcode() {
     assert_eq!(
         script.to_bytes(),
         vec![0, 0, 81, 82, 83, 84, 85, 86, 87, 88, 89, 96, 1, 17, 2, 210, 0, 2, 210, 0]
+    );
+}
+
+#[test]
+fn test_for_loop() {
+    define_pushable!();
+    let script = bitcoin_script! {
+        for i in 0..3 {
+            for k in 0..3 {
+            OP_ADD
+            { i }
+            { k }
+            }
+        }
+    };
+
+    assert_eq!(
+        script.to_bytes(),
+        vec![147, 0, 0, 147, 0, 81, 147, 0, 82, 147, 81, 0, 147, 81, 81, 147, 81, 82, 147, 82, 0, 147, 82, 81, 147, 82, 82]
     );
 }
