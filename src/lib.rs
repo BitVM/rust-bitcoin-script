@@ -19,7 +19,7 @@
 //! ```rust
 //! #![feature(proc_macro_hygiene)]
 //!
-//! use bitcoin_script::{bitcoin_script, define_pushable};
+//! use bitcoin_script::{script, define_pushable};
 //!
 //! define_pushable!();
 //! # let digest = 0;
@@ -59,7 +59,7 @@
 //!
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
-//! # use bitcoin_script::bitcoin_script;
+//! # use bitcoin_script::script;
 //! let script = script!(OP_CHECKSIG OP_VERIFY);
 //! ```
 //!
@@ -73,7 +73,7 @@
 //!
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
-//! # use bitcoin_script::bitcoin_script;
+//! # use bitcoin_script::script;
 //! let script = script!(123 -456 999999);
 //! ```
 //!
@@ -83,7 +83,7 @@
 //!
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
-//! # use bitcoin_script::bitcoin_script;
+//! # use bitcoin_script::script;
 //! let script = script!(
 //!     0x0102030405060708090a0b0c0d0e0f OP_HASH160
 //! );
@@ -104,7 +104,7 @@
 //!
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
-//! # use bitcoin_script::{bitcoin_script, define_pushable};
+//! # use bitcoin_script::{script, define_pushable};
 //! define_pushable!();
 //! let bytes = vec![1, 2, 3];
 //!
