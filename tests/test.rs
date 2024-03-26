@@ -91,7 +91,7 @@ fn test_for_loop() {
     define_pushable!();
     let script = bitcoin_script! {
         for i in 0..3 {
-            for k in 0..3 {
+            for k in 0..(3 as u32) {
             OP_ADD
             { i }
             { k }
