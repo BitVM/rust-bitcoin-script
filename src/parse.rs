@@ -1,10 +1,10 @@
 use bitcoin::blockdata::opcodes::Opcode;
 use proc_macro2::{
-    Delimiter,
-    Span, TokenStream,
+    Delimiter, Span, TokenStream,
     TokenTree::{self, *},
 };
 use quote::quote;
+use std::iter::Peekable;
 use std::str::FromStr;
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ macro_rules! abort {
 }
 
 pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
-    let mut tokens = tokens.into_iter();
+    let mut tokens = tokens.into_iter().peekable();
     let mut syntax = Vec::with_capacity(64);
 
     while let Some(token) = tokens.next() {
@@ -49,6 +49,7 @@ pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
         syntax.push(match (&token, token_str.as_ref()) {
             // Wrap for loops such that they return a Vec<ScriptBuf>
             (Ident(_), ident_str) if ident_str == "for" => parse_for_loop(token, &mut tokens),
+            (Ident(_), ident_str) if ident_str == "if" => parse_if(token, &mut tokens),
 
             // identifier, look up opcode
             (Ident(_), _) => {
@@ -85,8 +86,51 @@ pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
             _ => abort!(token.span(), "unexpected token"),
         });
     }
-
     syntax
+}
+
+fn parse_if<T>(token: TokenTree, tokens: &mut Peekable<T>) -> (Syntax, Span)
+where
+    T: Iterator<Item = TokenTree>,
+{
+    // Use a Vec here to get rid of warnings when the variable is overwritten
+    let mut escape = quote! {
+        let mut script_var = vec![];
+    };
+    escape.extend(std::iter::once(token.clone()));
+
+    while let Some(if_token) = tokens.next() {
+        match if_token {
+            Group(block) if block.delimiter() == Delimiter::Brace => {
+                let inner_block = block.stream();
+                escape.extend(quote! {
+                    {
+                        script_var.push(script! {
+                            #inner_block
+                        });
+                    }
+                });
+
+                match tokens.peek() {
+                    Some(else_token) if else_token.to_string().as_str() == "else" => 
+                        continue,
+                    _ => break,
+                }
+            }
+            _ => {
+                escape.extend(std::iter::once(if_token));
+                continue;
+            }
+        };
+    }
+    escape = quote! {
+        {
+            #escape;
+            script_var
+        }
+    }
+    .into();
+    (Syntax::Escape(escape), token.span())
 }
 
 fn parse_for_loop<T>(token: TokenTree, tokens: &mut T) -> (Syntax, Span)
@@ -119,7 +163,7 @@ where
         };
     }
 
-    (Syntax::Escape(quote!{ { #escape }}.into()), token.span())
+    (Syntax::Escape(quote! { { #escape } }.into()), token.span())
 }
 
 fn parse_escape<T>(token: TokenTree, tokens: &mut T) -> (Syntax, Span)

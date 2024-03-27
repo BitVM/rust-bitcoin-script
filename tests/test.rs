@@ -114,3 +114,30 @@ fn test_for_loop() {
         ]
     );
 }
+
+#[test]
+fn test_if() {
+    define_pushable!();
+    let script = script! {
+            if true {
+                if false {
+                    OP_1
+                    OP_2
+                } else {
+                    OP_3
+                }
+            } else {
+                OP_4
+            }
+            
+            if true {
+                OP_5
+            } else if false {
+                OP_6
+            } else {
+                OP_7
+            }
+    };
+
+    assert_eq!(script.to_bytes(), vec![83, 85]);
+}
