@@ -1,4 +1,4 @@
-use bitcoin::blockdata::opcodes::Opcode;
+use bitcoin::{blockdata::opcodes::Opcode, opcodes::OP_RESERVED};
 use proc_macro2::{
     Delimiter, Span, TokenStream,
     TokenTree::{self, *},
@@ -49,7 +49,12 @@ pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
         syntax.push(match (&token, token_str.as_ref()) {
             // Wrap for loops such that they return a Vec<ScriptBuf>
             (Ident(_), ident_str) if ident_str == "for" => parse_for_loop(token, &mut tokens),
+            // Wrap if-else statements such that they return a Vec<ScriptBuf>
             (Ident(_), ident_str) if ident_str == "if" => parse_if(token, &mut tokens),
+            // Replace DEBUG with OP_RESERVED
+            (Ident(_), ident_str) if ident_str == "DEBUG" => {
+                (Syntax::Opcode(OP_RESERVED), token.span())
+            }
 
             // identifier, look up opcode
             (Ident(_), _) => {
@@ -112,8 +117,7 @@ where
                 });
 
                 match tokens.peek() {
-                    Some(else_token) if else_token.to_string().as_str() == "else" => 
-                        continue,
+                    Some(else_token) if else_token.to_string().as_str() == "else" => continue,
                     _ => break,
                 }
             }
