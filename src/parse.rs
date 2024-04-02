@@ -1,4 +1,4 @@
-use bitcoin::{blockdata::opcodes::Opcode, opcodes::OP_RESERVED};
+use bitcoin::{blockdata::opcodes::Opcode, opcodes::all::OP_RESERVED};
 use proc_macro2::{
     Delimiter, Span, TokenStream,
     TokenTree::{self, *},
