@@ -1,6 +1,6 @@
 #![feature(proc_macro_hygiene)]
 
-use bitcoin::ScriptBuf;
+use bitcoin::{opcodes::all::OP_ADD, ScriptBuf};
 use bitcoin_script::{define_pushable, script};
 
 #[test]
@@ -129,7 +129,7 @@ fn test_if() {
             } else {
                 OP_4
             }
-            
+
             if true {
                 OP_5
             } else if false {
@@ -140,4 +140,31 @@ fn test_if() {
     };
 
     assert_eq!(script.to_bytes(), vec![83, 85]);
+}
+
+#[test]
+fn test_performance() {
+    define_pushable! {};
+    let loop_script = script! {
+        OP_ADD
+    };
+
+    let script = script! {
+        for _ in 0..20_000 {
+            { loop_script.clone() }
+        }
+    };
+
+    assert_eq!(script.as_bytes()[0], 147)
+}
+
+#[test]
+fn test_performance_no_macro() {
+    let mut builder = bitcoin::script::Builder::new();
+    for _ in 0..20_000 {
+        builder = builder.push_opcode(OP_ADD);
+    }
+    
+    let script = builder.as_script();
+    assert_eq!(script.as_bytes()[0], 147);
 }

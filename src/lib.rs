@@ -188,7 +188,10 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
             }
             impl NotU8Pushable for ::bitcoin::ScriptBuf {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                    Builder::from([builder.into_bytes(), self.into_bytes()].concat())
+                    let mut script_vec = vec![];
+                    script_vec.extend_from_slice(builder.as_bytes());
+                    script_vec.extend_from_slice(self.as_bytes());
+                    Builder::from(script_vec)
                 }
             }
             impl<T: NotU8Pushable> NotU8Pushable for Vec<T> {
