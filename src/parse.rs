@@ -110,9 +110,9 @@ where
                 let inner_block = block.stream();
                 escape.extend(quote! {
                     {
-                        script_var.push(script! {
+                        script_var.extend_from_slice(script! {
                             #inner_block
-                        });
+                        }.as_bytes());
                     }
                 });
 
@@ -130,7 +130,7 @@ where
     escape = quote! {
         {
             #escape;
-            script_var
+            bitcoin::script::ScriptBuf::from(script_var)
         }
     }
     .into();
@@ -152,9 +152,9 @@ where
                 let inner_block = block.stream();
                 escape.extend(quote! {
                     {
-                    script_var.extend_from_slice(script !{
-                        #inner_block
-                    }.as_bytes());
+                        script_var.extend_from_slice(script !{
+                            #inner_block
+                        }.as_bytes());
                     }
                     bitcoin::script::ScriptBuf::from(script_var)
                 });

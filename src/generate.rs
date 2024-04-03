@@ -51,7 +51,7 @@ fn generate_escape(builder: TokenStream, expression: TokenStream, span: Span) ->
                 #[allow(clippy::all)]
                 
                 use ::bitcoin::blockdata::script::Builder;
-                fn push(builder: Builder, value: impl pushable::Pushable) -> Builder {
+                fn push<T: pushable::Pushable>(builder: Builder, value: T) -> Builder {
                     value.bitcoin_script_push(builder)
                 }
                 push(builder, value)

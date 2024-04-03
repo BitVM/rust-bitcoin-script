@@ -143,28 +143,48 @@ fn test_if() {
 }
 
 #[test]
-fn test_performance() {
+fn test_performance_loop() {
     define_pushable! {};
     let loop_script = script! {
+        OP_ADD
+        OP_ADD
         OP_ADD
     };
 
     let script = script! {
-        for _ in 0..20_000 {
+        for _ in 0..5_000_000 {
             { loop_script.clone() }
         }
     };
 
-    assert_eq!(script.as_bytes()[0], 147)
+    assert_eq!(script.as_bytes()[5_000_000 - 1], 147)
 }
 
 #[test]
 fn test_performance_no_macro() {
     let mut builder = bitcoin::script::Builder::new();
-    for _ in 0..20_000 {
+    for _ in 0..40_000_000 {
         builder = builder.push_opcode(OP_ADD);
     }
-    
+
     let script = builder.as_script();
-    assert_eq!(script.as_bytes()[0], 147);
+    assert_eq!(script.as_bytes()[40_000_000 - 1], 147);
+}
+
+#[test]
+fn test_performance_if() {
+    define_pushable! {};
+
+    let script = script! {
+        for _ in 0..5_000_000 {
+            if true {
+                OP_ADD
+                OP_ADD
+            } else {
+                OP_ADD
+            }
+        }
+    };
+
+    assert_eq!(script.as_bytes()[5_000_000 - 1], 147)
 }
