@@ -1,13 +1,13 @@
 #![feature(proc_macro_hygiene)]
 
-use bitcoin::ScriptBuf;
-use bitcoin_script::{bitcoin_script, define_pushable};
+use bitcoin::{opcodes::all::OP_ADD, ScriptBuf};
+use bitcoin_script::{define_pushable, script};
 
 #[test]
 fn test_generic() {
     define_pushable!();
     let foo = vec![1, 2, 3, 4];
-    let script = bitcoin_script! (
+    let script = script! (
         OP_HASH160
         1234
         255
@@ -29,16 +29,16 @@ fn test_pushable_vectors() {
     define_pushable!();
     let byte_vec = vec![vec![1, 2, 3, 4], vec![5, 6, 7, 8]];
     let script_vec = vec![
-        bitcoin_script! {
+        script! {
             OP_ADD
         },
-        bitcoin_script! {
+        script! {
             OP_TRUE
             OP_FALSE
         },
     ];
 
-    let script = bitcoin_script! (
+    let script = script! (
         {byte_vec}
         {script_vec}
     );
@@ -55,19 +55,13 @@ fn test_usize_conversion() {
     define_pushable!();
     let usize_value: usize = 0xFFFFFFFFFFFFFFFF;
 
-<<<<<<< HEAD
-    let _script = bitcoin_script! (
-        {usize_value}
-    );
-=======
     let _script = script!({ usize_value });
->>>>>>> 2892b2f (Fix: Parsing all tokens when parsing for loop)
 }
 
 #[test]
 fn test_minimal_byte_opcode() {
     define_pushable!();
-    let script = bitcoin_script! (
+    let script = script! (
         0x00
         0x0
         0x1
@@ -98,7 +92,7 @@ fn script_from_func() -> ScriptBuf {
 #[test]
 fn test_for_loop() {
     define_pushable!();
-    let script = bitcoin_script! {
+    let script = script! {
         for i in 0..3 {
             for k in 0..(3 as u32) {
             OP_ADD
@@ -119,4 +113,78 @@ fn test_for_loop() {
             81, 147, 147, 124, 82, 82, 147
         ]
     );
+}
+
+#[test]
+fn test_if() {
+    define_pushable!();
+    let script = script! {
+            if true {
+                if false {
+                    OP_1
+                    OP_2
+                } else {
+                    OP_3
+                }
+            } else {
+                OP_4
+            }
+
+            if true {
+                OP_5
+            } else if false {
+                OP_6
+            } else {
+                OP_7
+            }
+    };
+
+    assert_eq!(script.to_bytes(), vec![83, 85]);
+}
+
+#[test]
+fn test_performance_loop() {
+    define_pushable! {};
+    let loop_script = script! {
+        OP_ADD
+        OP_ADD
+        OP_ADD
+    };
+
+    let script = script! {
+        for _ in 0..5_000_000 {
+            { loop_script.clone() }
+        }
+    };
+
+    assert_eq!(script.as_bytes()[5_000_000 - 1], 147)
+}
+
+#[test]
+fn test_performance_no_macro() {
+    let mut builder = bitcoin::script::Builder::new();
+    for _ in 0..40_000_000 {
+        builder = builder.push_opcode(OP_ADD);
+    }
+
+    let script = builder.as_script();
+    assert_eq!(script.as_bytes()[40_000_000 - 1], 147);
+}
+
+#[test]
+fn test_performance_if() {
+    define_pushable! {};
+
+    let script = script! {
+        for _ in 0..5_000_000 {
+            if true {
+                OP_ADD
+                OP_ADD
+            } else {
+                OP_ADD
+            }
+        }
+    };
+
+    assert_eq!(script.as_bytes()[5_000_000 - 1], 147)
 }

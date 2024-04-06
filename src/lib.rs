@@ -8,7 +8,7 @@
 //!
 //! ## Usage
 //!
-//! This crate exports a `bitcoin_script!` macro which can be used to build
+//! This crate exports a `script!` macro which can be used to build
 //! Bitcoin scripts. The macro returns the
 //! [`Script`](https://docs.rs/bitcoin/0.23.0/bitcoin/blockdata/script/struct.Script.html)
 //! type from the [`bitcoin`](https://github.com/rust-bitcoin/rust-bitcoin)
@@ -19,14 +19,14 @@
 //! ```rust
 //! #![feature(proc_macro_hygiene)]
 //!
-//! use bitcoin_script::{bitcoin_script, define_pushable};
+//! use bitcoin_script::{script, define_pushable};
 //!
 //! define_pushable!();
 //! # let digest = 0;
 //! # let seller_pubkey_hash = 0;
 //! # let buyer_pubkey_hash = 0;
 //!
-//! let htlc_script = bitcoin_script! {
+//! let htlc_script = script! {
 //!     OP_IF
 //!         OP_SHA256 <digest> OP_EQUALVERIFY OP_DUP OP_SHA256 <seller_pubkey_hash>
 //!     OP_ELSE
@@ -59,8 +59,8 @@
 //!
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
-//! # use bitcoin_script::bitcoin_script;
-//! let script = bitcoin_script!(OP_CHECKSIG OP_VERIFY);
+//! # use bitcoin_script::script;
+//! let script = script!(OP_CHECKSIG OP_VERIFY);
 //! ```
 //!
 //! #### Integer Literals
@@ -73,8 +73,8 @@
 //!
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
-//! # use bitcoin_script::bitcoin_script;
-//! let script = bitcoin_script!(123 -456 999999);
+//! # use bitcoin_script::script;
+//! let script = script!(123 -456 999999);
 //! ```
 //!
 //! #### Hex Literals
@@ -83,8 +83,8 @@
 //!
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
-//! # use bitcoin_script::bitcoin_script;
-//! let script = bitcoin_script!(
+//! # use bitcoin_script::script;
+//! let script = script!(
 //!     0x0102030405060708090a0b0c0d0e0f OP_HASH160
 //! );
 //! ```
@@ -104,11 +104,11 @@
 //!
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
-//! # use bitcoin_script::{bitcoin_script, define_pushable};
+//! # use bitcoin_script::{script, define_pushable};
 //! define_pushable!();
 //! let bytes = vec![1, 2, 3];
 //!
-//! let script = bitcoin_script! {
+//! let script = script! {
 //!     <bytes> OP_CHECKSIGVERIFY
 //!
 //!     <2016 * 5> OP_CSV
@@ -128,7 +128,7 @@ use quote::quote;
 
 #[proc_macro]
 #[proc_macro_error]
-pub fn bitcoin_script(tokens: TokenStream) -> TokenStream {
+pub fn script(tokens: TokenStream) -> TokenStream {
     set_dummy(quote!((::bitcoin::Script::new())));
     generate(parse(tokens.into())).into()
 }
@@ -188,7 +188,10 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
             }
             impl NotU8Pushable for ::bitcoin::ScriptBuf {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                    Builder::from([builder.into_bytes(), self.into_bytes()].concat())
+                    let mut script_vec = vec![];
+                    script_vec.extend_from_slice(builder.as_bytes());
+                    script_vec.extend_from_slice(self.as_bytes());
+                    Builder::from(script_vec)
                 }
             }
             impl<T: NotU8Pushable> NotU8Pushable for Vec<T> {
