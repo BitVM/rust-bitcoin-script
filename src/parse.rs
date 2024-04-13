@@ -151,10 +151,21 @@ where
             Group(block) if block.delimiter() == Delimiter::Brace => {
                 let inner_block = block.stream();
                 escape.extend(quote! {
-                    {
-                        script_var.extend_from_slice(script !{
+                    {   
+                        let next_script = script !{
                             #inner_block
-                        }.as_bytes());
+                        };
+                        if script_var.len() > 0 {
+                            if next_script.as_bytes().len() == 0 {
+                                eprintln!("Script can be optimized: Inner block of a for loop iteration is empty.");
+                            } else {
+                                // TODO this could be a data push
+                                let previous_opcode = ::bitcoin::opcodes::Opcode::from(script_var[script_var.len() - 1]);
+                                let opcode = ::bitcoin::opcodes::Opcode::from(next_script.as_bytes()[0]);
+                                pushable::check_optimality(previous_opcode, opcode);
+                            }
+                        }
+                        script_var.extend_from_slice(next_script.as_bytes());
                     }
                     bitcoin::script::ScriptBuf::from(script_var)
                 });
