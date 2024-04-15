@@ -42,7 +42,7 @@ macro_rules! abort {
 
 pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
     let mut tokens = tokens.into_iter().peekable();
-    let mut syntax = Vec::with_capacity(64);
+    let mut syntax = Vec::with_capacity(2048);
 
     while let Some(token) = tokens.next() {
         let token_str = token.to_string();
@@ -63,9 +63,10 @@ pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
                     // Not a native Bitcoin opcode
                     // Allow functions without arguments to be identified by just their name
                     _ => {
-                        let mut pseudo_stream = TokenStream::from(token.clone());
+                        let span = token.span();
+                        let mut pseudo_stream = TokenStream::from(token);
                         pseudo_stream.extend(TokenStream::from_str("()"));
-                        (Syntax::Escape(pseudo_stream), token.span())
+                        (Syntax::Escape(pseudo_stream), span)
                     }
                 }
             }
@@ -100,7 +101,7 @@ where
 {
     // Use a Vec here to get rid of warnings when the variable is overwritten
     let mut escape = quote! {
-        let mut script_var = vec![];
+        let mut script_var = Vec::with_capacity(256);
     };
     escape.extend(std::iter::once(token.clone()));
 

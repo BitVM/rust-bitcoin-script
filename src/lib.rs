@@ -307,7 +307,7 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     let (optimal, replacement_opcode) =
                         check_optimality(builder.last_opcode(), self.first_opcode());
-                    let mut script_vec = vec![];
+                    let mut script_vec = Vec::with_capacity(builder.0.as_bytes().len() + self.as_bytes().len());
                     if optimal {
                         script_vec.extend_from_slice(builder.as_bytes());
                         script_vec.extend_from_slice(self.as_bytes());

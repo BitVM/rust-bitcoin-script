@@ -144,11 +144,12 @@ fn test_performance_loop() {
         OP_ADD
         OP_ADD
         OP_ADD
+        script_from_func
     };
 
     let script = script! {
         for _ in 0..5_000_000 {
-            { loop_script.clone() }
+            {loop_script.clone()}
         }
     };
 
