@@ -164,7 +164,7 @@ where
                                     Some(instr_result) => match instr_result {
                                         Ok(instr) => match instr {
                                             bitcoin::script::Instruction::PushBytes(push_bytes) => {
-                                                if push_bytes.as_bytes() == [] {
+                                                if push_bytes.len() == 0 {
                                                     pushable::check_optimality(previous_opcode, ::bitcoin::opcodes::all::OP_PUSHBYTES_0, file!(), line!())
                                                 }
                                             },
@@ -180,7 +180,7 @@ where
                                 Some(instr_result) => match instr_result {
                                     Ok(instr) => match instr {
                                         bitcoin::script::Instruction::PushBytes(push_bytes) => {
-                                            if push_bytes.as_bytes() == [] {
+                                            if push_bytes.len() == 0 {
                                                 last_opcode = Some(::bitcoin::opcodes::all::OP_PUSHBYTES_0);
                                             }
                                         },

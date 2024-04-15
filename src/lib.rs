@@ -192,7 +192,7 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                     Some(instr_result) => match instr_result {
                         Ok(instr) => match instr {
                             bitcoin::script::Instruction::PushBytes(push_bytes) => {
-                                if push_bytes.as_bytes() == [] {
+                                if push_bytes.len() == 0 {
                                     check_optimality(::bitcoin::opcodes::all::OP_PUSHBYTES_0, opcode, file, line)
                                 }
                             },
@@ -231,7 +231,7 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                             bitcoin::script::Instruction::PushBytes(push_bytes) => {
                                 // Seperately handle OP_0 because it is turned into a PushBytes
                                 // struct in the Script instruction
-                                if push_bytes.as_bytes() == [] {
+                                if push_bytes.len() == 0 {
                                     Some((index, ::bitcoin::opcodes::all::OP_PUSHBYTES_0))
                                 } else {
                                     None
