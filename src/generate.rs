@@ -23,7 +23,7 @@ pub fn generate(syntax: Vec<(Syntax, Span)>) -> TokenStream {
 fn generate_opcode(opcode: Opcode, span: Span) -> TokenStream {
     let ident = Ident::new(opcode.to_string().as_ref(), span);
     quote_spanned!(span=>
-            .push_opcode(::bitcoin::blockdata::opcodes::all::#ident)
+            .push_opcode(::bitcoin::blockdata::opcodes::all::#ident, file!(), line!())
     )
 }
 
@@ -41,6 +41,6 @@ fn generate_int(n: i64, span: Span) -> TokenStream {
 
 fn generate_escape(expression: TokenStream, span: Span) -> TokenStream {
     quote_spanned!(span=>
-            .push_expression(#expression)
+            .push_expression(#expression, file!(), line!())
     )
 }

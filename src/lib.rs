@@ -148,27 +148,27 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
 
         pub struct Builder(pub BitcoinBuilder);
 
-        pub fn check_optimality(opcode: Opcode, next_opcode: Opcode) {
+        pub fn check_optimality(opcode: Opcode, next_opcode: Opcode, file: &str, line: u32) {
             match (opcode, next_opcode) {
-                (OP_PUSHNUM_1, OP_ADD) => eprintln!("Script can be optimized: 1 OP_ADD => OP_1ADD"),
-                (OP_PUSHNUM_1, OP_SUB) => eprintln!("Script can be optimized: 1 OP_SUB => OP_1SUB"),
+                (OP_PUSHNUM_1, OP_ADD) => eprintln!("Script at {}:{} can be optimized: 1 OP_ADD => OP_1ADD", file, line),
+                (OP_PUSHNUM_1, OP_SUB) => eprintln!("Script at {}:{} can be optimized: 1 OP_SUB => OP_1SUB", file, line),
                 (OP_DROP, OP_DROP) => {
-                    eprintln!("Script can be optimized: OP_DROP OP_DROP => OP_2DROP")
+                    eprintln!("Script at {}:{} can be optimized: OP_DROP OP_DROP => OP_2DROP", file, line)
                 }
-                (OP_PUSHBYTES_0, OP_ROLL) => eprintln!("Script can be optimized: Remove 0 OP_ROLL"),
+                (OP_PUSHBYTES_0, OP_ROLL) => eprintln!("Script at {}:{} can be optimized: Remove 0 OP_ROLL", file, line),
                 (OP_PUSHNUM_1, OP_ROLL) => {
-                    eprintln!("Script can be optimized: 1 OP_ROLL => OP_SWAP")
+                    eprintln!("Script at {}:{} can be optimized: 1 OP_ROLL => OP_SWAP", file, line)
                 }
                 (OP_PUSHNUM_2, OP_ROLL) => {
-                    eprintln!("Script can be optimized: 2 OP_ROLL => OP_ROT")
+                    eprintln!("Script at {}:{} can be optimized: 2 OP_ROLL => OP_ROT", file, line)
                 }
                 (OP_PUSHBYTES_0, OP_PICK) => {
-                    eprintln!("Script can be optimized: 0 OP_PICK => OP_DUP")
+                    eprintln!("Script at {}:{} can be optimized: 0 OP_PICK => OP_DUP", file, line)
                 }
                 (OP_PUSHBYTES_1, OP_PICK) => {
-                    eprintln!("Script can be optimized: 1 OP_PICK => OP_OVER")
+                    eprintln!("Script at {}:{} can be optimized: 1 OP_PICK => OP_OVER", file, line)
                 }
-                (OP_IF, OP_ELSE) => eprintln!("Script can be optimized: OP_IF OP_ELSE => OP_NOTIF"),
+                (OP_IF, OP_ELSE) => eprintln!("Script at {}:{} can be optimized: OP_IF OP_ELSE => OP_NOTIF", file, line),
                 (_, _) => (),
             }
         }
@@ -187,20 +187,20 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                 self.0.as_script()
             }
 
-            pub fn push_opcode(mut self, opcode: Opcode) -> Builder {
+            pub fn push_opcode(mut self, opcode: Opcode, file: &str, line: u32) -> Builder {
                 match self.as_script().instructions_minimal().last() {
                     Some(instr_result) => match instr_result {
                         Ok(instr) => match instr {
                             bitcoin::script::Instruction::PushBytes(push_bytes) => {
                                 if push_bytes.as_bytes() == [] {
-                                    check_optimality(::bitcoin::opcodes::all::OP_PUSHBYTES_0, opcode)
+                                    check_optimality(::bitcoin::opcodes::all::OP_PUSHBYTES_0, opcode, file, line)
                                 }
                             },
                             bitcoin::script::Instruction::Op(previous_opcode) => {
-                                check_optimality(previous_opcode, opcode)
+                                check_optimality(previous_opcode, opcode, file, line)
                             }
                         },
-                        Err(_) => eprintln!("Script includes non-minimal pushes."),
+                        Err(_) => eprintln!("Script at {}:{} includes non-minimal pushes.", file, line),
                     },
                     None => (),
                 };
@@ -223,7 +223,7 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                 self
             }
 
-            pub fn push_expression<T: Pushable>(self, expression: T) -> Builder {
+            pub fn push_expression<T: Pushable>(self, expression: T, file: &str, line: u32) -> Builder {
                 let last_opcode_index = match self.as_script().instruction_indices_minimal().last()
                 {
                     Some(instr_result) => match instr_result {
@@ -240,7 +240,7 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                             bitcoin::script::Instruction::Op(opcode) => Some((index, opcode)),
                         },
                         Err(_) => {
-                            eprintln!("Script includes non-minimal pushes.");
+                            eprintln!("Script at {}:{} includes non-minimal pushes.", file, line);
                             None
                         }
                     },
@@ -258,12 +258,12 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                             Ok(instr) => match instr {
                                 bitcoin::script::Instruction::PushBytes(_) => (),
                                 bitcoin::script::Instruction::Op(opcode) => {
-                                    check_optimality(previous_opcode, opcode)
+                                    check_optimality(previous_opcode, opcode, file, line)
                                 }
                             },
-                            Err(_) => eprintln!("Script includes non-minimal pushes."),
+                            Err(_) => eprintln!("Script at {}:{} includes non-minimal pushes.", file, line),
                         },
-                        None => eprintln!("Script extends an empty script!"),
+                        None => eprintln!("Script at {}:{} extends an empty script!", file, line),
                     };
                 }
                 builder
@@ -325,7 +325,7 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                             }
                         },
                         Err(_) => {
-                            eprintln!("Script includes non-minimal pushes.");
+                            eprintln!("A Script includes non-minimal pushes.");
                             None
                         }
                     },
@@ -338,10 +338,10 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                             Ok(instr) => match instr {
                                 bitcoin::script::Instruction::PushBytes(_) => (),
                                 bitcoin::script::Instruction::Op(opcode) => {
-                                    check_optimality(previous_opcode, opcode)
+                                    check_optimality(previous_opcode, opcode, file!(), line!())
                                 }
                             },
-                            Err(_) => eprintln!("Script includes non-minimal pushes."),
+                            Err(_) => eprintln!("A Script includes non-minimal pushes."),
                         },
                         None => (),
                     }

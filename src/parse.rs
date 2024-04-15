@@ -165,14 +165,14 @@ where
                                         Ok(instr) => match instr {
                                             bitcoin::script::Instruction::PushBytes(push_bytes) => {
                                                 if push_bytes.as_bytes() == [] {
-                                                    pushable::check_optimality(previous_opcode, ::bitcoin::opcodes::all::OP_PUSHBYTES_0)
+                                                    pushable::check_optimality(previous_opcode, ::bitcoin::opcodes::all::OP_PUSHBYTES_0, file!(), line!())
                                                 }
                                             },
-                                            bitcoin::script::Instruction::Op(opcode) => pushable::check_optimality(previous_opcode, opcode),
+                                            bitcoin::script::Instruction::Op(opcode) => pushable::check_optimality(previous_opcode, opcode, file!(), line!()),
                                         },
-                                        Err(_) => eprintln!("Script includes non-minimal pushes."),
+                                        Err(_) => eprintln!("Script at {}:{} includes non-minimal pushes.", file!(), line!()),
                                     },
-                                    None => eprintln!("Script can be optimized: Inner block of a for loop iteration is empty."),
+                                    None => eprintln!("Script at {}:{} can be optimized: Inner block of a for loop iteration is empty.", file!(), line!()),
                                 };
                             }
                             // Store last instruction of next_script as Opcode in last_opcode.
@@ -186,7 +186,7 @@ where
                                         },
                                         bitcoin::script::Instruction::Op(new_last_opcode) => last_opcode = Some(new_last_opcode),
                                     },
-                                    Err(_) => eprintln!("Script includes non-minimal pushes."),
+                                    Err(_) => eprintln!("Script at {}:{} includes non-minimal pushes.", file!(), line!()),
                                 },
                                 None => (),
                             };

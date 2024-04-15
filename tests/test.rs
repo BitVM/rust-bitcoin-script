@@ -195,14 +195,35 @@ fn test_simple() {
 }
 
 #[test]
-//#[should_panic]
+#[should_panic]
 // TODO: How to check whether some eprintln was called?
 fn test_non_optimal_opcodes() {
+
+
+
+
+
     let script = script! {
         for i in 0..10 {
+            if false {
+            } else {
             OP_ROLL
             { i }
+            }
         }
+
+        for i in 0..4 {
+            {i}
+            OP_ROLL
+        }
+
+        1
+        OP_ROLL
+        2
+        OP_ROLL
+
+        OP_DROP
+        OP_DROP
     };
 
     println!("{:?}", script);
