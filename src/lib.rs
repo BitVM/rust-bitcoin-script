@@ -19,9 +19,9 @@
 //! ```rust
 //! #![feature(proc_macro_hygiene)]
 //!
-//! use bitcoin_script::{script, define_pushable};
+//! # use bitcoin_script::{script, define_pushable};
 //!
-//! define_pushable!();
+//! # define_pushable!();
 //! # let digest = 0;
 //! # let seller_pubkey_hash = 0;
 //! # let buyer_pubkey_hash = 0;
@@ -59,7 +59,8 @@
 //!
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
-//! # use bitcoin_script::script;
+//! # use bitcoin_script::{script, define_pushable};
+//! # define_pushable!();
 //! let script = script!(OP_CHECKSIG OP_VERIFY);
 //! ```
 //!
@@ -73,7 +74,8 @@
 //!
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
-//! # use bitcoin_script::script;
+//! # use bitcoin_script::{script, define_pushable};
+//! # define_pushable!();
 //! let script = script!(123 -456 999999);
 //! ```
 //!
@@ -83,7 +85,8 @@
 //!
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
-//! # use bitcoin_script::script;
+//! # use bitcoin_script::{script, define_pushable};
+//! # define_pushable!();
 //! let script = script!(
 //!     0x0102030405060708090a0b0c0d0e0f OP_HASH160
 //! );
@@ -105,7 +108,7 @@
 //! ```rust
 //! # #![feature(proc_macro_hygiene)]
 //! # use bitcoin_script::{script, define_pushable};
-//! define_pushable!();
+//! # define_pushable!();
 //! let bytes = vec![1, 2, 3];
 //!
 //! let script = script! {
@@ -140,7 +143,7 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
 
         use bitcoin::blockdata::opcodes::{all::*, Opcode};
         use bitcoin::blockdata::script::Builder as BitcoinBuilder;
-        use bitcoin::blockdata::script::{PushBytesBuf, Script};
+        use bitcoin::blockdata::script::{PushBytesBuf, PushBytes, Script};
         use std::convert::TryFrom;
 
         pub struct Builder(pub BitcoinBuilder);
@@ -210,8 +213,8 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                 self
             }
 
-            pub fn push_slice(mut self, slice: PushBytesBuf) -> Builder {
-                self.0 = self.0.push_slice(slice);
+            pub fn push_slice<T: AsRef<PushBytes>>(mut self, data: T) -> Builder {
+                self.0 = self.0.push_slice(data);
                 self
             }
 

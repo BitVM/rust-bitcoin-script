@@ -143,6 +143,7 @@ where
 {
     let mut escape = quote! {
         let mut script_var = vec![];
+        let mut last_opcode = None;
     };
     escape.extend(std::iter::once(token.clone()));
 
@@ -155,16 +156,41 @@ where
                         let next_script = script !{
                             #inner_block
                         };
-                        if script_var.len() > 0 {
-                            if next_script.as_bytes().len() == 0 {
-                                eprintln!("Script can be optimized: Inner block of a for loop iteration is empty.");
-                            } else {
-                                // TODO this could be a data push
-                                let previous_opcode = ::bitcoin::opcodes::Opcode::from(script_var[script_var.len() - 1]);
-                                let opcode = ::bitcoin::opcodes::Opcode::from(next_script.as_bytes()[0]);
-                                pushable::check_optimality(previous_opcode, opcode);
+                        if next_script.as_bytes().len() > 0 {
+                            if let Some(previous_opcode) = last_opcode {
+                                // Check optimality for the next_script first opcode and the previous
+                                // scripts last opcode.
+                                match next_script.instructions_minimal().next() {
+                                    Some(instr_result) => match instr_result {
+                                        Ok(instr) => match instr {
+                                            bitcoin::script::Instruction::PushBytes(push_bytes) => {
+                                                if push_bytes.as_bytes() == [] {
+                                                    pushable::check_optimality(previous_opcode, ::bitcoin::opcodes::all::OP_PUSHBYTES_0)
+                                                }
+                                            },
+                                            bitcoin::script::Instruction::Op(opcode) => pushable::check_optimality(previous_opcode, opcode),
+                                        },
+                                        Err(_) => eprintln!("Script includes non-minimal pushes."),
+                                    },
+                                    None => eprintln!("Script can be optimized: Inner block of a for loop iteration is empty."),
+                                };
                             }
-                        }
+                            // Store last instruction of next_script as Opcode in last_opcode.
+                            match next_script.instructions_minimal().last() {
+                                Some(instr_result) => match instr_result {
+                                    Ok(instr) => match instr {
+                                        bitcoin::script::Instruction::PushBytes(push_bytes) => {
+                                            if push_bytes.as_bytes() == [] {
+                                                last_opcode = Some(::bitcoin::opcodes::all::OP_PUSHBYTES_0);
+                                            }
+                                        },
+                                        bitcoin::script::Instruction::Op(new_last_opcode) => last_opcode = Some(new_last_opcode),
+                                    },
+                                    Err(_) => eprintln!("Script includes non-minimal pushes."),
+                                },
+                                None => (),
+                            };
+                        };
                         script_var.extend_from_slice(next_script.as_bytes());
                     }
                     bitcoin::script::ScriptBuf::from(script_var)
