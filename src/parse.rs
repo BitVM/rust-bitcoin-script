@@ -144,7 +144,6 @@ where
 {
     let mut escape = quote! {
         let mut script_var = vec![];
-        let mut last_opcode = None;
     };
     escape.extend(std::iter::once(token.clone()));
 
@@ -157,24 +156,7 @@ where
                         let next_script = script !{
                             #inner_block
                         };
-                        // Store last instruction of next_script as Opcode in last_opcode.
-                        let new_last_opcode = pushable::parse_instruction(next_script.instructions().last());
-                        // Check optimality for the next_script first opcode and the previous
-                        // scripts last opcode.
-                        let (optimal, replacement_opcode) =
-                            pushable::check_optimality(last_opcode, next_script.first_opcode());
-                        if optimal {
-                            script_var.extend_from_slice(next_script.as_bytes());
-                        } else {
-                            script_var = script_var[..script_var.len() - 1].to_vec();
-                            match replacement_opcode {
-                                Some(opcode) => script_var.push(opcode.to_u8()),
-                                None => (),
-                            }
-                            let new_script_bytes = next_script.as_bytes();
-                            script_var.extend_from_slice(&new_script_bytes[1..new_script_bytes.len()]);
-                        }
-                        last_opcode = new_last_opcode;
+                        script_var.extend_from_slice(next_script.as_bytes());
                     }
                     bitcoin::script::ScriptBuf::from(script_var)
                 });

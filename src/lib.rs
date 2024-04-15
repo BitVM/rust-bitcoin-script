@@ -148,47 +148,6 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
 
             pub struct Builder(pub BitcoinBuilder);
 
-            pub fn parse_instruction(
-                instruction: Option<Result<Instruction<'_>, ::bitcoin::script::Error>>,
-            ) -> Option<Opcode> {
-                match instruction {
-                    Some(Ok(bitcoin::script::Instruction::PushBytes(push_bytes))) => {
-                        // Handle OP_0 (Stored in rust-bitcoin as PushBytes(PushBytes([])))
-                        if push_bytes.len() == 0 {
-                            Some(::bitcoin::opcodes::all::OP_PUSHBYTES_0)
-                        } else {
-                            None
-                        }
-                    }
-                    Some(Ok(bitcoin::script::Instruction::Op(op))) => Some(op),
-                    _ => None,
-                }
-            }
-
-            pub fn check_optimality(
-                opcode: Option<Opcode>,
-                next_opcode: Option<Opcode>,
-            ) -> (bool, Option<Opcode>) {
-                if opcode == None || next_opcode == None {
-                    (true, None)
-                } else {
-                    let opcode = opcode.unwrap();
-                    let next_opcode = next_opcode.unwrap();
-                    match (opcode, next_opcode) {
-                        (OP_PUSHNUM_1, OP_ADD) => (false, Some(OP_1ADD)),
-                        (OP_PUSHNUM_1, OP_SUB) => (false, Some(OP_1SUB)),
-                        (OP_DROP, OP_DROP) => (false, Some(OP_2DROP)),
-                        (OP_PUSHBYTES_0, OP_ROLL) => (false, None),
-                        (OP_PUSHNUM_1, OP_ROLL) => (false, Some(OP_SWAP)),
-                        (OP_PUSHNUM_2, OP_ROLL) => (false, Some(OP_ROT)),
-                        (OP_PUSHBYTES_0, OP_PICK) => (false, Some(OP_DUP)),
-                        (OP_PUSHBYTES_1, OP_PICK) => (false, Some(OP_OVER)),
-                        (OP_IF, OP_ELSE) => (false, Some(OP_NOTIF)),
-                        (_, _) => (true, None),
-                    }
-                }
-            }
-
             impl Builder {
                 pub fn new() -> Self {
                     let builder = BitcoinBuilder::new();
@@ -203,38 +162,8 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                     self.0.as_script()
                 }
 
-                pub fn last_opcode(&self) -> Option<Opcode> {
-                    match self.0.as_script().instructions().last() {
-                        Some(Ok(instr)) => match instr {
-                            bitcoin::script::Instruction::PushBytes(push_bytes) => {
-                                // Handle OP_0 (Stored in rust-bitcoin as PushBytes(PushBytes([])))
-                                if push_bytes.len() == 0 {
-                                    Some(::bitcoin::opcodes::all::OP_PUSHBYTES_0)
-                                } else {
-                                    None
-                                }
-                            }
-                            bitcoin::script::Instruction::Op(op) => Some(op),
-                        },
-                        _ => None,
-                    }
-                }
-
                 pub fn push_opcode(mut self, opcode: Opcode) -> Builder {
-                    let (optimal, replacement_opcode) =
-                        check_optimality(self.last_opcode(), Some(opcode));
-                    if optimal {
-                        self.0 = self.0.push_opcode(opcode);
-                    } else {
-                        // NOTE: This is only valid because here we know that the last element of
-                        // the script is either 0 or an Opcode and not some arbitrary data push.
-                        let mut script_bytes = self.0.into_bytes();
-                        script_bytes.truncate(script_bytes.len() - 1);
-                        self.0 = BitcoinBuilder::from(script_bytes);
-                        if let Some(replacement_opcode) = replacement_opcode {
-                            self.0 = self.0.push_opcode(replacement_opcode);
-                        }
-                    }
+                    self.0 = self.0.push_opcode(opcode);
                     self
                 }
 
@@ -305,24 +234,9 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
             }
             impl NotU8Pushable for ::bitcoin::ScriptBuf {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                    let (optimal, replacement_opcode) =
-                        check_optimality(builder.last_opcode(), self.first_opcode());
                     let mut script_vec = Vec::with_capacity(builder.0.as_bytes().len() + self.as_bytes().len());
-                    if optimal {
-                        script_vec.extend_from_slice(builder.as_bytes());
-                        script_vec.extend_from_slice(self.as_bytes());
-                    } else {
-                        let first_script_bytes = builder.0.as_bytes();
-                        script_vec
-                            .extend_from_slice(&first_script_bytes[..first_script_bytes.len() - 1]);
-                        match replacement_opcode {
-                            Some(opcode) => script_vec.push(opcode.to_u8()),
-                            None => (),
-                        }
-                        let second_script_bytes = self.as_bytes();
-                        script_vec
-                            .extend_from_slice(&second_script_bytes[1..second_script_bytes.len()]);
-                    }
+                    script_vec.extend_from_slice(builder.as_bytes());
+                    script_vec.extend_from_slice(self.as_bytes());
                     Builder::from(script_vec)
                 }
             }

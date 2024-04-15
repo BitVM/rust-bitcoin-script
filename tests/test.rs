@@ -144,7 +144,6 @@ fn test_performance_loop() {
         OP_ADD
         OP_ADD
         OP_ADD
-        script_from_func
     };
 
     let script = script! {
