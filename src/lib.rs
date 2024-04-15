@@ -139,242 +139,216 @@ pub fn script(tokens: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn define_pushable(_: TokenStream) -> TokenStream {
     quote!(
-    pub mod pushable {
+        pub mod pushable {
 
-        use bitcoin::blockdata::opcodes::{all::*, Opcode};
-        use bitcoin::blockdata::script::Builder as BitcoinBuilder;
-        use bitcoin::blockdata::script::{PushBytesBuf, PushBytes, Script};
-        use std::convert::TryFrom;
+            use bitcoin::blockdata::opcodes::{all::*, Opcode};
+            use bitcoin::blockdata::script::Builder as BitcoinBuilder;
+            use bitcoin::blockdata::script::{Instruction, PushBytes, PushBytesBuf, Script};
+            use std::convert::TryFrom;
 
-        pub struct Builder(pub BitcoinBuilder);
+            pub struct Builder(pub BitcoinBuilder);
 
-        pub fn check_optimality(opcode: Opcode, next_opcode: Opcode, file: &str, line: u32) {
-            match (opcode, next_opcode) {
-                (OP_PUSHNUM_1, OP_ADD) => eprintln!("Script at {}:{} can be optimized: 1 OP_ADD => OP_1ADD", file, line),
-                (OP_PUSHNUM_1, OP_SUB) => eprintln!("Script at {}:{} can be optimized: 1 OP_SUB => OP_1SUB", file, line),
-                (OP_DROP, OP_DROP) => {
-                    eprintln!("Script at {}:{} can be optimized: OP_DROP OP_DROP => OP_2DROP", file, line)
+            pub fn parse_instruction(
+                instruction: Option<Result<Instruction<'_>, ::bitcoin::script::Error>>,
+            ) -> Option<Opcode> {
+                match instruction {
+                    Some(Ok(bitcoin::script::Instruction::PushBytes(push_bytes))) => {
+                        // Handle OP_0 (Stored in rust-bitcoin as PushBytes(PushBytes([])))
+                        if push_bytes.len() == 0 {
+                            Some(::bitcoin::opcodes::all::OP_PUSHBYTES_0)
+                        } else {
+                            None
+                        }
+                    }
+                    Some(Ok(bitcoin::script::Instruction::Op(op))) => Some(op),
+                    _ => None,
                 }
-                (OP_PUSHBYTES_0, OP_ROLL) => eprintln!("Script at {}:{} can be optimized: Remove 0 OP_ROLL", file, line),
-                (OP_PUSHNUM_1, OP_ROLL) => {
-                    eprintln!("Script at {}:{} can be optimized: 1 OP_ROLL => OP_SWAP", file, line)
-                }
-                (OP_PUSHNUM_2, OP_ROLL) => {
-                    eprintln!("Script at {}:{} can be optimized: 2 OP_ROLL => OP_ROT", file, line)
-                }
-                (OP_PUSHBYTES_0, OP_PICK) => {
-                    eprintln!("Script at {}:{} can be optimized: 0 OP_PICK => OP_DUP", file, line)
-                }
-                (OP_PUSHBYTES_1, OP_PICK) => {
-                    eprintln!("Script at {}:{} can be optimized: 1 OP_PICK => OP_OVER", file, line)
-                }
-                (OP_IF, OP_ELSE) => eprintln!("Script at {}:{} can be optimized: OP_IF OP_ELSE => OP_NOTIF", file, line),
-                (_, _) => (),
-            }
-        }
-
-        impl Builder {
-            pub fn new() -> Self {
-                let builder = BitcoinBuilder::new();
-                Builder(builder)
             }
 
-            pub fn as_bytes(&self) -> &[u8] {
-                self.0.as_bytes()
+            pub fn check_optimality(
+                opcode: Option<Opcode>,
+                next_opcode: Option<Opcode>,
+            ) -> (bool, Option<Opcode>) {
+                if opcode == None || next_opcode == None {
+                    (true, None)
+                } else {
+                    let opcode = opcode.unwrap();
+                    let next_opcode = next_opcode.unwrap();
+                    match (opcode, next_opcode) {
+                        (OP_PUSHNUM_1, OP_ADD) => (false, Some(OP_1ADD)),
+                        (OP_PUSHNUM_1, OP_SUB) => (false, Some(OP_1SUB)),
+                        (OP_DROP, OP_DROP) => (false, Some(OP_2DROP)),
+                        (OP_PUSHBYTES_0, OP_ROLL) => (false, None),
+                        (OP_PUSHNUM_1, OP_ROLL) => (false, Some(OP_SWAP)),
+                        (OP_PUSHNUM_2, OP_ROLL) => (false, Some(OP_ROT)),
+                        (OP_PUSHBYTES_0, OP_PICK) => (false, Some(OP_DUP)),
+                        (OP_PUSHBYTES_1, OP_PICK) => (false, Some(OP_OVER)),
+                        (OP_IF, OP_ELSE) => (false, Some(OP_NOTIF)),
+                        (_, _) => (true, None),
+                    }
+                }
             }
 
-            pub fn as_script(&self) -> &Script {
-                self.0.as_script()
-            }
+            impl Builder {
+                pub fn new() -> Self {
+                    let builder = BitcoinBuilder::new();
+                    Builder(builder)
+                }
 
-            pub fn push_opcode(mut self, opcode: Opcode, file: &str, line: u32) -> Builder {
-                match self.as_script().instructions_minimal().last() {
-                    Some(instr_result) => match instr_result {
-                        Ok(instr) => match instr {
+                pub fn as_bytes(&self) -> &[u8] {
+                    self.0.as_bytes()
+                }
+
+                pub fn as_script(&self) -> &Script {
+                    self.0.as_script()
+                }
+
+                pub fn last_opcode(&self) -> Option<Opcode> {
+                    match self.0.as_script().instructions().last() {
+                        Some(Ok(instr)) => match instr {
                             bitcoin::script::Instruction::PushBytes(push_bytes) => {
+                                // Handle OP_0 (Stored in rust-bitcoin as PushBytes(PushBytes([])))
                                 if push_bytes.len() == 0 {
-                                    check_optimality(::bitcoin::opcodes::all::OP_PUSHBYTES_0, opcode, file, line)
-                                }
-                            },
-                            bitcoin::script::Instruction::Op(previous_opcode) => {
-                                check_optimality(previous_opcode, opcode, file, line)
-                            }
-                        },
-                        Err(_) => eprintln!("Script at {}:{} includes non-minimal pushes.", file, line),
-                    },
-                    None => (),
-                };
-                self.0 = self.0.push_opcode(opcode);
-                self
-            }
-
-            pub fn push_int(mut self, int: i64) -> Builder {
-                self.0 = self.0.push_int(int);
-                self
-            }
-
-            pub fn push_slice<T: AsRef<PushBytes>>(mut self, data: T) -> Builder {
-                self.0 = self.0.push_slice(data);
-                self
-            }
-
-            pub fn push_key(mut self, pub_key: &::bitcoin::PublicKey) -> Builder {
-                self.0 = self.0.push_key(pub_key);
-                self
-            }
-
-            pub fn push_expression<T: Pushable>(self, expression: T, file: &str, line: u32) -> Builder {
-                let last_opcode_index = match self.as_script().instruction_indices_minimal().last()
-                {
-                    Some(instr_result) => match instr_result {
-                        Ok((index, instr)) => match instr {
-                            bitcoin::script::Instruction::PushBytes(push_bytes) => {
-                                // Seperately handle OP_0 because it is turned into a PushBytes
-                                // struct in the Script instruction
-                                if push_bytes.len() == 0 {
-                                    Some((index, ::bitcoin::opcodes::all::OP_PUSHBYTES_0))
+                                    Some(::bitcoin::opcodes::all::OP_PUSHBYTES_0)
                                 } else {
                                     None
                                 }
-                            },
-                            bitcoin::script::Instruction::Op(opcode) => Some((index, opcode)),
-                        },
-                        Err(_) => {
-                            eprintln!("Script at {}:{} includes non-minimal pushes.", file, line);
-                            None
-                        }
-                    },
-                    None => None,
-                };
-                let builder = expression.bitcoin_script_push(self);
-                if let Some((last_index, previous_opcode)) = last_opcode_index {
-                    match builder
-                        .as_script()
-                        .instructions_minimal()
-                        .skip(last_index + 1)
-                        .next()
-                    {
-                        Some(instr_result) => match instr_result {
-                            Ok(instr) => match instr {
-                                bitcoin::script::Instruction::PushBytes(_) => (),
-                                bitcoin::script::Instruction::Op(opcode) => {
-                                    check_optimality(previous_opcode, opcode, file, line)
-                                }
-                            },
-                            Err(_) => eprintln!("Script at {}:{} includes non-minimal pushes.", file, line),
-                        },
-                        None => eprintln!("Script at {}:{} extends an empty script!", file, line),
-                    };
-                }
-                builder
-            }
-        }
-
-        impl From<Vec<u8>> for Builder {
-            fn from(v: Vec<u8>) -> Builder {
-                let builder = BitcoinBuilder::from(v);
-                Builder(builder)
-            }
-        }
-        // We split up the bitcoin_script_push function to allow pushing a single u8 value as
-        // an integer (i64), Vec<u8> as raw data and Vec<T> for any T: Pushable object that is
-        // not a u8. Otherwise the Vec<u8> and Vec<T: Pushable> definitions conflict.
-        trait NotU8Pushable {
-            fn bitcoin_script_push(self, builder: Builder) -> Builder;
-        }
-        impl NotU8Pushable for i64 {
-            fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                builder.push_int(self)
-            }
-        }
-        impl NotU8Pushable for i32 {
-            fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                builder.push_int(self as i64)
-            }
-        }
-        impl NotU8Pushable for u32 {
-            fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                builder.push_int(self as i64)
-            }
-        }
-        impl NotU8Pushable for usize {
-            fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                builder.push_int(
-                    i64::try_from(self).unwrap_or_else(|_| panic!("Usize does not fit in i64")),
-                )
-            }
-        }
-        impl NotU8Pushable for Vec<u8> {
-            fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                builder.push_slice(PushBytesBuf::try_from(self).unwrap())
-            }
-        }
-        impl NotU8Pushable for ::bitcoin::PublicKey {
-            fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                builder.push_key(&self)
-            }
-        }
-        impl NotU8Pushable for ::bitcoin::ScriptBuf {
-            fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                let previous_opcode = match self.as_script().instructions_minimal().last() {
-                    Some(instr_result) => match instr_result {
-                        Ok(instr) => match instr {
-                            bitcoin::script::Instruction::PushBytes(_) => None,
-                            bitcoin::script::Instruction::Op(previous_opcode) => {
-                                Some(previous_opcode)
                             }
+                            bitcoin::script::Instruction::Op(op) => Some(op),
                         },
-                        Err(_) => {
-                            eprintln!("A Script includes non-minimal pushes.");
-                            None
-                        }
-                    },
-                    None => None,
-                };
-
-                if let Some(previous_opcode) = previous_opcode {
-                    match self.as_script().instructions_minimal().last() {
-                        Some(instr_result) => match instr_result {
-                            Ok(instr) => match instr {
-                                bitcoin::script::Instruction::PushBytes(_) => (),
-                                bitcoin::script::Instruction::Op(opcode) => {
-                                    check_optimality(previous_opcode, opcode, file!(), line!())
-                                }
-                            },
-                            Err(_) => eprintln!("A Script includes non-minimal pushes."),
-                        },
-                        None => (),
+                        _ => None,
                     }
-                };
-                let mut script_vec = vec![];
-                script_vec.extend_from_slice(builder.as_bytes());
-                script_vec.extend_from_slice(self.as_bytes());
-                Builder::from(script_vec)
-            }
-        }
-        impl<T: NotU8Pushable> NotU8Pushable for Vec<T> {
-            fn bitcoin_script_push(self, mut builder: Builder) -> Builder {
-                for pushable in self {
-                    builder = pushable.bitcoin_script_push(builder);
                 }
-                builder
-            }
-        }
-        pub trait Pushable {
-            fn bitcoin_script_push(self, builder: Builder) -> Builder;
-        }
-        impl<T: NotU8Pushable> Pushable for T {
-            fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                NotU8Pushable::bitcoin_script_push(self, builder)
-            }
-        }
 
-        impl Pushable for u8 {
-            fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                builder.push_int(self as i64)
+                pub fn push_opcode(mut self, opcode: Opcode) -> Builder {
+                    let (optimal, replacement_opcode) =
+                        check_optimality(self.last_opcode(), Some(opcode));
+                    if optimal {
+                        self.0 = self.0.push_opcode(opcode);
+                    } else {
+                        // NOTE: This is only valid because here we know that the last element of
+                        // the script is either 0 or an Opcode and not some arbitrary data push.
+                        let mut script_bytes = self.0.into_bytes();
+                        script_bytes.truncate(script_bytes.len() - 1);
+                        self.0 = BitcoinBuilder::from(script_bytes);
+                        if let Some(replacement_opcode) = replacement_opcode {
+                            self.0 = self.0.push_opcode(replacement_opcode);
+                        }
+                    }
+                    self
+                }
+
+                pub fn push_int(mut self, int: i64) -> Builder {
+                    self.0 = self.0.push_int(int);
+                    self
+                }
+
+                pub fn push_slice<T: AsRef<PushBytes>>(mut self, data: T) -> Builder {
+                    self.0 = self.0.push_slice(data);
+                    self
+                }
+
+                pub fn push_key(mut self, pub_key: &::bitcoin::PublicKey) -> Builder {
+                    self.0 = self.0.push_key(pub_key);
+                    self
+                }
+
+                pub fn push_expression<T: Pushable>(self, expression: T) -> Builder {
+                    let builder = expression.bitcoin_script_push(self);
+                    builder
+                }
+            }
+
+            impl From<Vec<u8>> for Builder {
+                fn from(v: Vec<u8>) -> Builder {
+                    let builder = BitcoinBuilder::from(v);
+                    Builder(builder)
+                }
+            }
+            // We split up the bitcoin_script_push function to allow pushing a single u8 value as
+            // an integer (i64), Vec<u8> as raw data and Vec<T> for any T: Pushable object that is
+            // not a u8. Otherwise the Vec<u8> and Vec<T: Pushable> definitions conflict.
+            trait NotU8Pushable {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder;
+            }
+            impl NotU8Pushable for i64 {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_int(self)
+                }
+            }
+            impl NotU8Pushable for i32 {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_int(self as i64)
+                }
+            }
+            impl NotU8Pushable for u32 {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_int(self as i64)
+                }
+            }
+            impl NotU8Pushable for usize {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_int(
+                        i64::try_from(self).unwrap_or_else(|_| panic!("Usize does not fit in i64")),
+                    )
+                }
+            }
+            impl NotU8Pushable for Vec<u8> {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_slice(PushBytesBuf::try_from(self).unwrap())
+                }
+            }
+            impl NotU8Pushable for ::bitcoin::PublicKey {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_key(&self)
+                }
+            }
+            impl NotU8Pushable for ::bitcoin::ScriptBuf {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    let (optimal, replacement_opcode) =
+                        check_optimality(builder.last_opcode(), self.first_opcode());
+                    let mut script_vec = vec![];
+                    if optimal {
+                        script_vec.extend_from_slice(builder.as_bytes());
+                        script_vec.extend_from_slice(self.as_bytes());
+                    } else {
+                        let first_script_bytes = builder.0.as_bytes();
+                        script_vec
+                            .extend_from_slice(&first_script_bytes[..first_script_bytes.len() - 1]);
+                        match replacement_opcode {
+                            Some(opcode) => script_vec.push(opcode.to_u8()),
+                            None => (),
+                        }
+                        let second_script_bytes = self.as_bytes();
+                        script_vec
+                            .extend_from_slice(&second_script_bytes[1..second_script_bytes.len()]);
+                    }
+                    Builder::from(script_vec)
+                }
+            }
+            impl<T: NotU8Pushable> NotU8Pushable for Vec<T> {
+                fn bitcoin_script_push(self, mut builder: Builder) -> Builder {
+                    for pushable in self {
+                        builder = pushable.bitcoin_script_push(builder);
+                    }
+                    builder
+                }
+            }
+            pub trait Pushable {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder;
+            }
+            impl<T: NotU8Pushable> Pushable for T {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    NotU8Pushable::bitcoin_script_push(self, builder)
+                }
+            }
+
+            impl Pushable for u8 {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_int(self as i64)
+                }
             }
         }
-    }
     )
     .into()
 }

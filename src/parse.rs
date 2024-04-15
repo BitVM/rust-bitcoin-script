@@ -156,42 +156,24 @@ where
                         let next_script = script !{
                             #inner_block
                         };
-                        if next_script.as_bytes().len() > 0 {
-                            if let Some(previous_opcode) = last_opcode {
-                                // Check optimality for the next_script first opcode and the previous
-                                // scripts last opcode.
-                                match next_script.instructions_minimal().next() {
-                                    Some(instr_result) => match instr_result {
-                                        Ok(instr) => match instr {
-                                            bitcoin::script::Instruction::PushBytes(push_bytes) => {
-                                                if push_bytes.len() == 0 {
-                                                    pushable::check_optimality(previous_opcode, ::bitcoin::opcodes::all::OP_PUSHBYTES_0, file!(), line!())
-                                                }
-                                            },
-                                            bitcoin::script::Instruction::Op(opcode) => pushable::check_optimality(previous_opcode, opcode, file!(), line!()),
-                                        },
-                                        Err(_) => eprintln!("Script at {}:{} includes non-minimal pushes.", file!(), line!()),
-                                    },
-                                    None => eprintln!("Script at {}:{} can be optimized: Inner block of a for loop iteration is empty.", file!(), line!()),
-                                };
-                            }
-                            // Store last instruction of next_script as Opcode in last_opcode.
-                            match next_script.instructions_minimal().last() {
-                                Some(instr_result) => match instr_result {
-                                    Ok(instr) => match instr {
-                                        bitcoin::script::Instruction::PushBytes(push_bytes) => {
-                                            if push_bytes.len() == 0 {
-                                                last_opcode = Some(::bitcoin::opcodes::all::OP_PUSHBYTES_0);
-                                            }
-                                        },
-                                        bitcoin::script::Instruction::Op(new_last_opcode) => last_opcode = Some(new_last_opcode),
-                                    },
-                                    Err(_) => eprintln!("Script at {}:{} includes non-minimal pushes.", file!(), line!()),
-                                },
+                        // Store last instruction of next_script as Opcode in last_opcode.
+                        let new_last_opcode = pushable::parse_instruction(next_script.instructions().last());
+                        // Check optimality for the next_script first opcode and the previous
+                        // scripts last opcode.
+                        let (optimal, replacement_opcode) =
+                            pushable::check_optimality(last_opcode, next_script.first_opcode());
+                        if optimal {
+                            script_var.extend_from_slice(next_script.as_bytes());
+                        } else {
+                            script_var = script_var[..script_var.len() - 1].to_vec();
+                            match replacement_opcode {
+                                Some(opcode) => script_var.push(opcode.to_u8()),
                                 None => (),
-                            };
-                        };
-                        script_var.extend_from_slice(next_script.as_bytes());
+                            }
+                            let new_script_bytes = next_script.as_bytes();
+                            script_var.extend_from_slice(&new_script_bytes[1..new_script_bytes.len()]);
+                        }
+                        last_opcode = new_last_opcode;
                     }
                     bitcoin::script::ScriptBuf::from(script_var)
                 });

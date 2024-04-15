@@ -105,9 +105,9 @@ fn test_for_loop() {
     assert_eq!(
         script.to_bytes(),
         vec![
-            147, 147, 124, 0, 0, 147, 147, 124, 0, 81, 147, 147, 124, 0, 82, 147, 147, 124, 81, 0,
-            147, 147, 124, 81, 81, 147, 147, 124, 81, 82, 147, 147, 124, 82, 0, 147, 147, 124, 82,
-            81, 147, 147, 124, 82, 82, 147
+            147, 147, 124, 0, 0, 147, 147, 124, 0, 139, 147, 124, 0, 82, 147, 147, 124, 81, 0, 147,
+            147, 124, 81, 139, 147, 124, 81, 82, 147, 147, 124, 82, 0, 147, 147, 124, 82, 139, 147,
+            124, 82, 82, 147
         ]
     );
 }
@@ -185,47 +185,42 @@ fn test_performance_if() {
 #[test]
 fn test_simple() {
     let script = script! {
-        OP_1
-        OP_2
-        { 3 }
-        { 4 }
+        for i in 0..6 {
+            { 6 }
+            OP_ROLL
+            { 10 + i + 1 }
+            OP_ROLL
+        }
     };
 
-    assert_eq!(script.as_bytes(), vec![81, 82, 83, 84]);
+    assert_eq!(script.as_bytes(), vec![86, 122, 91, 122, 86, 122, 92, 122, 86, 122, 93, 122, 86, 122, 94, 122, 86, 122, 95, 122, 86, 122, 96, 122]);
 }
 
 #[test]
-#[should_panic]
-// TODO: How to check whether some eprintln was called?
 fn test_non_optimal_opcodes() {
-
-
-
-
-
     let script = script! {
-        for i in 0..10 {
-            if false {
-            } else {
+        OP_0
+        OP_ROLL
+        0
+        OP_ROLL
+        OP_1
+        OP_ROLL
+
+        OP_DROP
+        OP_DROP
+
+        for i in 0..4 {
             OP_ROLL
             { i }
-            }
         }
 
         for i in 0..4 {
-            {i}
+            { i }
             OP_ROLL
         }
 
-        1
-        OP_ROLL
-        2
-        OP_ROLL
-
-        OP_DROP
-        OP_DROP
     };
 
     println!("{:?}", script);
+    assert_eq!(script.as_bytes(), vec![124, 109, 122, 124, 123, 83, 124, 123, 83, 122]);
 }
-
