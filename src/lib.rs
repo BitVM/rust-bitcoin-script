@@ -182,6 +182,11 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                     self
                 }
 
+                pub fn push_x_only_key(mut self, x_only_key: &::bitcoin::XOnlyPublicKey) -> Builder {
+                    self.0 = self.0.push_x_only_key(x_only_key);
+                    self
+                }
+
                 pub fn push_expression<T: Pushable>(self, expression: T) -> Builder {
                     let builder = expression.bitcoin_script_push(self);
                     builder
@@ -230,6 +235,11 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
             impl NotU8Pushable for ::bitcoin::PublicKey {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_key(&self)
+                }
+            }
+            impl NotU8Pushable for ::bitcoin::XOnlyPublicKey {
+                fn bitcoin_script_push(self, builder: Builder) -> Builder {
+                    builder.push_x_only_key(&self)
                 }
             }
             impl NotU8Pushable for ::bitcoin::ScriptBuf {
