@@ -152,7 +152,7 @@ where
             Group(block) if block.delimiter() == Delimiter::Brace => {
                 let inner_block = block.stream();
                 escape.extend(quote! {
-                    {   
+                    {
                         let next_script = script !{
                             #inner_block
                         };

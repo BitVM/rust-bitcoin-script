@@ -8,10 +8,10 @@ pub fn generate(syntax: Vec<(Syntax, Span)>) -> TokenStream {
 
     for (item, span) in syntax {
         let push = match item {
-            Syntax::Opcode(opcode) =>generate_opcode(opcode, span),
+            Syntax::Opcode(opcode) => generate_opcode(opcode, span),
             Syntax::Bytes(bytes) => generate_bytes(bytes, span),
             Syntax::Int(int) => generate_int(int, span),
-            Syntax::Escape(expression) => generate_escape(expression, span)
+            Syntax::Escape(expression) => generate_escape(expression, span),
         };
         tokens.extend(push);
     }
