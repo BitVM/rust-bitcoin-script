@@ -17,8 +17,6 @@
 //! **Example:**
 //!
 //! ```rust
-//! #![feature(proc_macro_hygiene)]
-//!
 //! # use bitcoin_script::{script, define_pushable};
 //!
 //! # define_pushable!();
@@ -58,7 +56,6 @@
 //! All normal opcodes are available, in the form `OP_X`.
 //!
 //! ```rust
-//! # #![feature(proc_macro_hygiene)]
 //! # use bitcoin_script::{script, define_pushable};
 //! # define_pushable!();
 //! let script = script!(OP_CHECKSIG OP_VERIFY);
@@ -73,7 +70,6 @@
 //! -`255` will resolve to a length-delimited varint: `0x02ff00` (note the extra zero byte, due to the way Bitcoin scripts use the most-significant bit to represent the sign)`
 //!
 //! ```rust
-//! # #![feature(proc_macro_hygiene)]
 //! # use bitcoin_script::{script, define_pushable};
 //! # define_pushable!();
 //! let script = script!(123 -456 999999);
@@ -84,7 +80,6 @@
 //! Hex strings can be specified, prefixed with `0x`.
 //!
 //! ```rust
-//! # #![feature(proc_macro_hygiene)]
 //! # use bitcoin_script::{script, define_pushable};
 //! # define_pushable!();
 //! let script = script!(
@@ -106,7 +101,6 @@
 //!
 //!
 //! ```rust
-//! # #![feature(proc_macro_hygiene)]
 //! # use bitcoin_script::{script, define_pushable};
 //! # define_pushable!();
 //! let bytes = vec![1, 2, 3];
@@ -117,8 +111,6 @@
 //!     <2016 * 5> OP_CSV
 //! };
 //! ```
-
-#![feature(proc_macro_hygiene)]
 
 mod generate;
 mod parse;
@@ -182,7 +174,10 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                     self
                 }
 
-                pub fn push_x_only_key(mut self, x_only_key: &::bitcoin::XOnlyPublicKey) -> Builder {
+                pub fn push_x_only_key(
+                    mut self,
+                    x_only_key: &::bitcoin::XOnlyPublicKey,
+                ) -> Builder {
                     self.0 = self.0.push_x_only_key(x_only_key);
                     self
                 }
@@ -244,7 +239,8 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
             }
             impl NotU8Pushable for ::bitcoin::ScriptBuf {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                    let mut script_vec = Vec::with_capacity(builder.0.as_bytes().len() + self.as_bytes().len());
+                    let mut script_vec =
+                        Vec::with_capacity(builder.0.as_bytes().len() + self.as_bytes().len());
                     script_vec.extend_from_slice(builder.as_bytes());
                     script_vec.extend_from_slice(self.as_bytes());
                     Builder::from(script_vec)

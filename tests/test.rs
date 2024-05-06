@@ -1,5 +1,3 @@
-#![feature(proc_macro_hygiene)]
-
 use bitcoin::{opcodes::all::OP_ADD, ScriptBuf};
 use bitcoin_script::{define_pushable, script};
 
@@ -193,7 +191,13 @@ fn test_simple() {
         }
     };
 
-    assert_eq!(script.as_bytes(), vec![86, 122, 91, 122, 86, 122, 92, 122, 86, 122, 93, 122, 86, 122, 94, 122, 86, 122, 95, 122, 86, 122, 96, 122]);
+    assert_eq!(
+        script.as_bytes(),
+        vec![
+            86, 122, 91, 122, 86, 122, 92, 122, 86, 122, 93, 122, 86, 122, 94, 122, 86, 122, 95,
+            122, 86, 122, 96, 122
+        ]
+    );
 }
 
 #[test]
@@ -222,5 +226,8 @@ fn test_non_optimal_opcodes() {
     };
 
     println!("{:?}", script);
-    assert_eq!(script.as_bytes(), vec![124, 109, 122, 124, 123, 83, 124, 123, 83, 122]);
+    assert_eq!(
+        script.as_bytes(),
+        vec![124, 109, 122, 124, 123, 83, 124, 123, 83, 122]
+    );
 }
