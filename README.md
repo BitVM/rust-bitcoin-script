@@ -10,7 +10,7 @@
 
 ## Usage
 
-This crate exports a `script!` macro which can be used to build Bitcoin scripts. The macro returns the [`Script`](https://docs.rs/bitcoin/0.23.0/bitcoin/blockdata/script/struct.Script.html) type from the [`bitcoin`](https://github.com/rust-bitcoin/rust-bitcoin) crate.
+This crate exports a `script!` macro which can be used to build Bitcoin scripts. The macro returns the [`Script`](https://docs.rs/bitcoin/latest/bitcoin/struct.ScriptBuf.html) type from the [`bitcoin`](https://github.com/rust-bitcoin/rust-bitcoin) crate.
 
 **Example:**
 
@@ -30,11 +30,9 @@ let htlc_script = script! {
 };
 ```
 
-**NOTE:** As of rustc 1.41, the Rust compiler prevents using procedural macros as expressions. To use this macro you'll need to be on nightly and add `#![feature(proc_macro_hygiene)]` to the root of your crate. This will be stablized in the near future, the PR can be found here: https://github.com/rust-lang/rust/pull/68717
-
 ### Syntax
 
-Scripts are based on the standard syntax made up of opcodes, base-10 integers, or hex string literals. Additionally, Rust expressions can be interpolated in order to support dynamically capturing Rust variables or computing values (delimited by `<angle brackets>`).
+Scripts are based on the standard syntax made up of opcodes, base-10 integers, or hex string literals. Additionally, Rust expressions can be interpolated in order to support dynamically capturing Rust variables or computing values (delimited by `<angle brackets>` or `{curly brackets}`). The `script!` macro can be nested.
 
 Whitespace is ignored - scripts can be formatted in the author's preferred style.
 
@@ -70,13 +68,15 @@ let script = script!(
 
 #### Escape Sequences
 
-Dynamic Rust expressions are supported inside the script, surrounded by angle brackets. In many cases, this will just be a variable identifier, but this can also be a function call or arithmetic.
+Dynamic Rust expressions are supported inside the script, surrounded by angle brackets or in a code block. In many cases, this will just be a variable identifier, but this can also be a function call or arithmetic.
 
 Rust expressions of the following types are supported:
 
 - `i64`
 - `Vec<u8>`
-- [`bitcoin::PublicKey`](https://docs.rs/bitcoin/0.23.0/bitcoin/util/key/struct.PublicKey.html)
+- [`bitcoin::PublicKey`](https://docs.rs/bitcoin/latest/bitcoin/struct.PublicKey.html)
+- [`bitcoin::XOnlyPublicKey`](https://docs.rs/bitcoin/latest/bitcoin/struct.XOnlyPublicKey.html)
+- [`bitcoin::ScriptBuf`](https://docs.rs/bitcoin/latest/bitcoin/struct.ScriptBuf.html)
 
 ```rust
 let bytes = vec![1, 2, 3];
@@ -85,5 +85,10 @@ let script = script! {
     <bytes> OP_CHECKSIGVERIFY
 
     <2016 * 5> OP_CSV
+
+    <script! { OP_FALSE OP_TRUE }>
 };
 ```
+
+### Optimality
+Obsolete Opcodes are automatically removed when using the `optimal_opcodes` branch. E.g. a sequence of `OP_0 OP_ROLL` will be optimized away.
