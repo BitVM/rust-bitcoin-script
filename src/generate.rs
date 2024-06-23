@@ -15,8 +15,6 @@ pub fn generate(syntax: Vec<(Syntax, Span)>) -> TokenStream {
         };
         tokens.extend(push);
     }
-
-    tokens.extend(quote!(.0.into_script()));
     tokens
 }
 

@@ -18,7 +18,7 @@ fn test_generic() {
     );
 
     assert_eq!(
-        script.to_bytes(),
+        script.compile().as_bytes(),
         vec![169, 2, 210, 4, 2, 255, 0, 79, 2, 255, 128, 3, 205, 171, 0, 82, 81, 82, 83, 84]
     );
 }
@@ -42,7 +42,7 @@ fn test_pushable_vectors() {
     );
 
     assert_eq!(
-        script.to_bytes(),
+        script.compile().to_bytes(),
         vec![81, 82, 83, 84, 85, 86, 87, 88, 147, 81, 0]
     );
 }
@@ -76,13 +76,24 @@ fn test_minimal_byte_opcode() {
     );
 
     assert_eq!(
-        script.to_bytes(),
+        script.compile().to_bytes(),
         vec![0, 0, 81, 82, 83, 84, 85, 86, 87, 88, 89, 96, 1, 17, 2, 210, 0, 2, 210, 0]
     );
 }
 
-fn script_from_func() -> ScriptBuf {
+fn script_from_func() -> pushable::Builder {
     return script! { OP_ADD };
+}
+
+#[test]
+fn test_simple_loop() {
+    let script = script! {
+        for _ in 0..3 {
+            OP_ADD
+        }
+    };
+
+    assert_eq!(script.compile().to_bytes(), vec![147, 147, 147])
 }
 
 #[test]
@@ -101,7 +112,7 @@ fn test_for_loop() {
     };
 
     assert_eq!(
-        script.to_bytes(),
+        script.compile().to_bytes(),
         vec![
             147, 147, 124, 0, 0, 147, 147, 124, 0, 139, 147, 124, 0, 82, 147, 147, 124, 81, 0, 147,
             147, 124, 81, 139, 147, 124, 81, 82, 147, 147, 124, 82, 0, 147, 147, 124, 82, 139, 147,
@@ -133,7 +144,7 @@ fn test_if() {
             }
     };
 
-    assert_eq!(script.to_bytes(), vec![83, 85]);
+    assert_eq!(script.compile().to_bytes(), vec![83, 85]);
 }
 
 #[test]
@@ -150,7 +161,7 @@ fn test_performance_loop() {
         }
     };
 
-    assert_eq!(script.as_bytes()[5_000_000 - 1], 147)
+    assert_eq!(script.compile().as_bytes()[5_000_000 - 1], 147)
 }
 
 #[test]
@@ -177,7 +188,7 @@ fn test_performance_if() {
         }
     };
 
-    assert_eq!(script.as_bytes()[5_000_000 - 1], 147)
+    assert_eq!(script.compile().as_bytes()[5_000_000 - 1], 147)
 }
 
 #[test]
@@ -192,7 +203,7 @@ fn test_simple() {
     };
 
     assert_eq!(
-        script.as_bytes(),
+        script.compile().as_bytes(),
         vec![
             86, 122, 91, 122, 86, 122, 92, 122, 86, 122, 93, 122, 86, 122, 94, 122, 86, 122, 95,
             122, 86, 122, 96, 122
@@ -227,7 +238,7 @@ fn test_non_optimal_opcodes() {
 
     println!("{:?}", script);
     assert_eq!(
-        script.as_bytes(),
+        script.compile().as_bytes(),
         vec![124, 109, 122, 124, 123, 83, 124, 123, 83, 122]
     );
 }
