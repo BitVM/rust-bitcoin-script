@@ -133,53 +133,122 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
     quote!(
         pub mod pushable {
 
-            use bitcoin::blockdata::opcodes::{all::*, Opcode};
-            use bitcoin::blockdata::script::Builder as BitcoinBuilder;
-            use bitcoin::blockdata::script::{Instruction, PushBytes, PushBytesBuf, Script};
+            use bitcoin::blockdata::opcodes::Opcode;
+            use bitcoin::blockdata::script::{PushBytes, PushBytesBuf, ScriptBuf};
+            use bitcoin::opcodes::{OP_0, OP_TRUE};
+            use bitcoin::script::write_scriptint;
             use std::convert::TryFrom;
 
-            pub struct Builder(pub BitcoinBuilder);
+            #[derive(Clone, Debug)]
+            enum Block {
+                Call(Builder),
+                Script(ScriptBuf),
+            }
+
+            impl Block {
+                fn new_script() -> Self {
+                    let buf = ScriptBuf::new();
+                    Block::Script(buf)
+                }
+            }
+
+            #[derive(Clone, Debug)]
+            pub struct Builder {
+                size: usize,
+                blocks: Vec<Block>,
+            }
 
             impl Builder {
                 pub fn new() -> Self {
-                    let builder = BitcoinBuilder::new();
-                    Builder(builder)
+                    let blocks = Vec::new();
+                    Builder { size: 0, blocks }
                 }
 
-                pub fn as_bytes(&self) -> &[u8] {
-                    self.0.as_bytes()
+                fn get_script_block(&mut self) -> &mut ScriptBuf {
+                    // Check if the last block is a Script block
+                    let is_script_block = match self.blocks.last_mut() {
+                        Some(Block::Script(_)) => true,
+                        _ => false,
+                    };
+
+                    // Create a new Script block if necessary
+                    if !is_script_block {
+                        self.blocks.push(Block::new_script());
+                    }
+
+                    if let Some(Block::Script(ref mut script)) = self.blocks.last_mut() {
+                        script
+                    } else {
+                        unreachable!()
+                    }
                 }
 
-                pub fn as_script(&self) -> &Script {
-                    self.0.as_script()
-                }
-
-                pub fn push_opcode(mut self, opcode: Opcode) -> Builder {
-                    self.0 = self.0.push_opcode(opcode);
+                pub fn push_opcode(mut self, data: Opcode) -> Builder {
+                    self.size += 1;
+                    let script = self.get_script_block();
+                    script.push_opcode(data);
                     self
                 }
 
-                pub fn push_int(mut self, int: i64) -> Builder {
-                    self.0 = self.0.push_int(int);
+                pub fn push_env_script(mut self, data: Builder) -> Builder {
+                    self.size += data.size;
+                    self.blocks.push(Block::Call(data));
                     self
+                }
+
+                fn compile_to_bytes(&self, script: &mut Vec<u8>) {
+                    for block in self.blocks.as_slice() {
+                        match block {
+                            Block::Call(call) => call.compile_to_bytes(script),
+                            Block::Script(block_script) => script.extend(block_script.as_bytes()),
+                        }
+                    }
+                }
+
+                pub fn compile(self) -> ScriptBuf {
+                    let mut script = Vec::with_capacity(self.size);
+                    self.compile_to_bytes(&mut script);
+                    ScriptBuf::from_bytes(script)
+                }
+
+                pub fn push_int(self, data: i64) -> Builder {
+                    // We can special-case -1, 1-16
+                    if data == -1 || (1..=16).contains(&data) {
+                        let opcode = Opcode::from((data - 1 + OP_TRUE.to_u8() as i64) as u8);
+                        self.push_opcode(opcode)
+                    }
+                    // We can also special-case zero
+                    else if data == 0 {
+                        self.push_opcode(OP_0)
+                    }
+                    // Otherwise encode it as data
+                    else {
+                        self.push_int_non_minimal(data)
+                    }
+                }
+                fn push_int_non_minimal(self, data: i64) -> Builder {
+                    let mut buf = [0u8; 8];
+                    let len = write_scriptint(&mut buf, data);
+                    self.push_slice(&<&PushBytes>::from(&buf)[..len])
                 }
 
                 pub fn push_slice<T: AsRef<PushBytes>>(mut self, data: T) -> Builder {
-                    self.0 = self.0.push_slice(data);
+                    self.size += 1;
+                    let script = self.get_script_block();
+                    script.push_slice(data);
                     self
                 }
 
-                pub fn push_key(mut self, pub_key: &::bitcoin::PublicKey) -> Builder {
-                    self.0 = self.0.push_key(pub_key);
-                    self
+                pub fn push_key(self, key: &::bitcoin::PublicKey) -> Builder {
+                    if key.compressed {
+                        self.push_slice(key.inner.serialize())
+                    } else {
+                        self.push_slice(key.inner.serialize_uncompressed())
+                    }
                 }
 
-                pub fn push_x_only_key(
-                    mut self,
-                    x_only_key: &::bitcoin::XOnlyPublicKey,
-                ) -> Builder {
-                    self.0 = self.0.push_x_only_key(x_only_key);
-                    self
+                pub fn push_x_only_key(self, x_only_key: &::bitcoin::XOnlyPublicKey) -> Builder {
+                    self.push_slice(x_only_key.serialize())
                 }
 
                 pub fn push_expression<T: Pushable>(self, expression: T) -> Builder {
@@ -188,12 +257,6 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                 }
             }
 
-            impl From<Vec<u8>> for Builder {
-                fn from(v: Vec<u8>) -> Builder {
-                    let builder = BitcoinBuilder::from(v);
-                    Builder(builder)
-                }
-            }
             // We split up the bitcoin_script_push function to allow pushing a single u8 value as
             // an integer (i64), Vec<u8> as raw data and Vec<T> for any T: Pushable object that is
             // not a u8. Otherwise the Vec<u8> and Vec<T: Pushable> definitions conflict.
@@ -237,13 +300,9 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                     builder.push_x_only_key(&self)
                 }
             }
-            impl NotU8Pushable for ::bitcoin::ScriptBuf {
+            impl NotU8Pushable for Builder {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
-                    let mut script_vec =
-                        Vec::with_capacity(builder.0.as_bytes().len() + self.as_bytes().len());
-                    script_vec.extend_from_slice(builder.as_bytes());
-                    script_vec.extend_from_slice(self.as_bytes());
-                    Builder::from(script_vec)
+                    builder.push_env_script(self)
                 }
             }
             impl<T: NotU8Pushable> NotU8Pushable for Vec<T> {

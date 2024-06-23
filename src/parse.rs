@@ -101,7 +101,7 @@ where
 {
     // Use a Vec here to get rid of warnings when the variable is overwritten
     let mut escape = quote! {
-        let mut script_var = Vec::with_capacity(256);
+        let mut script_var = pushable::Builder::new();
     };
     escape.extend(std::iter::once(token.clone()));
 
@@ -111,9 +111,9 @@ where
                 let inner_block = block.stream();
                 escape.extend(quote! {
                     {
-                        script_var.extend_from_slice(script! {
+                        script_var = script_var.push_env_script(script! {
                             #inner_block
-                        }.as_bytes());
+                        });
                     }
                 });
 
@@ -131,7 +131,7 @@ where
     escape = quote! {
         {
             #escape;
-            bitcoin::script::ScriptBuf::from(script_var)
+            script_var
         }
     }
     .into();
@@ -143,7 +143,7 @@ where
     T: Iterator<Item = TokenTree>,
 {
     let mut escape = quote! {
-        let mut script_var = vec![];
+        let mut script_var = pushable::Builder::new();
     };
     escape.extend(std::iter::once(token.clone()));
 
@@ -153,12 +153,11 @@ where
                 let inner_block = block.stream();
                 escape.extend(quote! {
                     {
-                        let next_script = script !{
+                        script_var = script_var.push_env_script(script !{
                             #inner_block
-                        };
-                        script_var.extend_from_slice(next_script.as_bytes());
+                        });
                     }
-                    bitcoin::script::ScriptBuf::from(script_var)
+                    script_var
                 });
                 break;
             }
