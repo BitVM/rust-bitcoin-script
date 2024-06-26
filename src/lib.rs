@@ -164,6 +164,10 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                     Builder { size: 0, blocks }
                 }
 
+                pub fn len(&self) -> usize {
+                    self.size
+                }
+
                 fn get_script_block(&mut self) -> &mut ScriptBuf {
                     // Check if the last block is a Script block
                     let is_script_block = match self.blocks.last_mut() {
