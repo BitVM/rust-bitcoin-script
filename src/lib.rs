@@ -137,11 +137,13 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
             use bitcoin::blockdata::script::{PushBytes, PushBytesBuf, ScriptBuf};
             use bitcoin::opcodes::{OP_0, OP_TRUE};
             use bitcoin::script::write_scriptint;
+            use std::collections::HashMap;
             use std::convert::TryFrom;
+            use std::hash::{DefaultHasher, Hash, Hasher};
 
-            #[derive(Clone, Debug)]
+            #[derive(Clone, Debug, Hash)]
             enum Block {
-                Call(Builder),
+                Call(u64),
                 Script(ScriptBuf),
             }
 
@@ -156,12 +158,31 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
             pub struct Builder {
                 size: usize,
                 blocks: Vec<Block>,
+                // TODO: It may be worth to lazy initialize the script_map
+                script_map: HashMap<u64, Builder>,
+            }
+
+            impl Hash for Builder {
+                fn hash<H: Hasher>(&self, state: &mut H) {
+                    self.size.hash(state);
+                    self.blocks.hash(state);
+                }
+            }
+
+            fn calculate_hash<T: Hash>(t: &T) -> u64 {
+                let mut hasher = DefaultHasher::new();
+                t.hash(&mut hasher);
+                hasher.finish()
             }
 
             impl Builder {
                 pub fn new() -> Self {
                     let blocks = Vec::new();
-                    Builder { size: 0, blocks }
+                    Builder {
+                        size: 0,
+                        blocks,
+                        script_map: HashMap::new(),
+                    }
                 }
 
                 pub fn len(&self) -> usize {
@@ -196,15 +217,34 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
 
                 pub fn push_env_script(mut self, data: Builder) -> Builder {
                     self.size += data.size;
-                    self.blocks.push(Block::Call(data));
+                    let id = calculate_hash(&data);
+                    self.blocks.push(Block::Call(id));
+                    // Register script
+                    if !self.script_map.contains_key(&id) {
+                        self.script_map.insert(id, data);
+                    }
                     self
                 }
 
                 fn compile_to_bytes(&self, script: &mut Vec<u8>) {
                     for block in self.blocks.as_slice() {
                         match block {
-                            Block::Call(call) => call.compile_to_bytes(script),
-                            Block::Script(block_script) => script.extend(block_script.as_bytes()),
+                            Block::Call(id) => {
+                                let called_script = self
+                                    .script_map
+                                    .get(id)
+                                    .expect("Missing entry for a called script");
+                                called_script.compile_to_bytes(script);
+                            }
+                            Block::Script(block_script) => {
+                                let source_script = block_script.as_bytes();
+                                let start = script.len();
+                                unsafe {
+                                    script.set_len(start + source_script.len());
+                                }
+                                script[start..start + source_script.len()]
+                                    .copy_from_slice(&source_script);
+                            }
                         }
                     }
                 }
