@@ -3,6 +3,7 @@ use bitcoin_script::{define_pushable, script};
 
 define_pushable!();
 
+
 #[test]
 fn test_generic() {
     let foo = vec![1, 2, 3, 4];
@@ -149,19 +150,29 @@ fn test_if() {
 
 #[test]
 fn test_performance_loop() {
-    let loop_script = script! {
-        OP_ADD
-        OP_ADD
+    let mut nested_script = script! {
         OP_ADD
     };
 
+    for _ in 0..20 {
+        nested_script = script! {
+            { nested_script.clone() }
+            { nested_script.clone() }
+        }
+    }
+    println!("Subscript size: {}", nested_script.len());
+
     let script = script! {
-        for _ in 0..5_000_000 {
-            {loop_script.clone()}
+        for _ in 0..10 {
+            {nested_script.clone()}
         }
     };
 
-    assert_eq!(script.compile().as_bytes()[5_000_000 - 1], 147)
+    println!("Expected size: {}", script.len());
+    let compiled_script = script.compile();
+    println!("Compiled size {}", compiled_script.len());
+
+    assert_eq!(compiled_script.as_bytes()[5_000_000 - 1], 147)
 }
 
 #[test]
