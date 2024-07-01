@@ -132,7 +132,7 @@ pub fn script(tokens: TokenStream) -> TokenStream {
 pub fn define_pushable(_: TokenStream) -> TokenStream {
     quote!(
         pub mod pushable {
-        
+
             use bitcoin::blockdata::opcodes::Opcode;
             use bitcoin::blockdata::script::{PushBytes, PushBytesBuf, ScriptBuf};
             use bitcoin::opcodes::{OP_0, OP_TRUE};
@@ -140,20 +140,20 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
             use std::collections::HashMap;
             use std::convert::TryFrom;
             use std::hash::{DefaultHasher, Hash, Hasher};
-        
+
             #[derive(Clone, Debug, Hash)]
             enum Block {
                 Call(u64),
                 Script(ScriptBuf),
             }
-        
+
             impl Block {
                 fn new_script() -> Self {
                     let buf = ScriptBuf::new();
                     Block::Script(buf)
                 }
             }
-        
+
             #[derive(Clone, Debug)]
             pub struct Builder {
                 size: usize,
@@ -161,20 +161,20 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                 // TODO: It may be worth to lazy initialize the script_map
                 script_map: HashMap<u64, Builder>,
             }
-        
+
             impl Hash for Builder {
                 fn hash<H: Hasher>(&self, state: &mut H) {
                     self.size.hash(state);
                     self.blocks.hash(state);
                 }
             }
-        
+
             fn calculate_hash<T: Hash>(t: &T) -> u64 {
                 let mut hasher = DefaultHasher::new();
                 t.hash(&mut hasher);
                 hasher.finish()
             }
-        
+
             impl Builder {
                 pub fn new() -> Self {
                     let blocks = Vec::new();
@@ -184,37 +184,37 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                         script_map: HashMap::new(),
                     }
                 }
-        
+
                 pub fn len(&self) -> usize {
                     self.size
                 }
-        
+
                 fn get_script_block(&mut self) -> &mut ScriptBuf {
                     // Check if the last block is a Script block
                     let is_script_block = match self.blocks.last_mut() {
                         Some(Block::Script(_)) => true,
                         _ => false,
                     };
-        
+
                     // Create a new Script block if necessary
                     if !is_script_block {
                         self.blocks.push(Block::new_script());
                     }
-        
+
                     if let Some(Block::Script(ref mut script)) = self.blocks.last_mut() {
                         script
                     } else {
                         unreachable!()
                     }
                 }
-        
+
                 pub fn push_opcode(mut self, data: Opcode) -> Builder {
                     self.size += 1;
                     let script = self.get_script_block();
                     script.push_opcode(data);
                     self
                 }
-        
+
                 pub fn push_env_script(mut self, data: Builder) -> Builder {
                     self.size += data.size;
                     let id = calculate_hash(&data);
@@ -225,8 +225,10 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                     }
                     self
                 }
-        
-                fn compile_to_bytes(&self, script: &mut Vec<u8>) {
+
+                // Compiles the builder to bytes using a cache that stores all called_script starting
+                // positions in script to copy them from script instead of recompiling.
+                fn compile_to_bytes(&self, script: &mut Vec<u8>, cache: &mut HashMap<u64, usize>) {
                     for block in self.blocks.as_slice() {
                         match block {
                             Block::Call(id) => {
@@ -234,35 +236,71 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                                     .script_map
                                     .get(id)
                                     .expect("Missing entry for a called script");
-                                called_script.compile_to_bytes(script);
+                                // Check if the script with the hash id is in cache
+                                match cache.get(id) {
+                                    Some(called_start) => {
+                                        // Copy the already compiled called_script from the position it was
+                                        // inserted in the compiled script.
+                                        let start = script.len();
+                                        let end = start + called_script.len();
+                                        assert!(
+                                            end <= script.capacity(),
+                                            "Not enough capacity allocated for compilated script"
+                                        );
+                                        unsafe {
+                                            script.set_len(end);
+
+                                            let src_ptr = script.as_ptr().add(*called_start);
+                                            let dst_ptr = script.as_mut_ptr().add(start);
+
+                                            std::ptr::copy_nonoverlapping(
+                                                src_ptr,
+                                                dst_ptr,
+                                                called_script.len(),
+                                            );
+                                        }
+                                    }
+                                    None => {
+                                        // Compile the called_script the first time and add its starting
+                                        // position in the compiled script to the cache.
+                                        let called_script_start = script.len();
+                                        called_script.compile_to_bytes(script, cache);
+                                        cache.insert(*id, called_script_start);
+                                    }
+                                }
                             }
                             Block::Script(block_script) => {
                                 let source_script = block_script.as_bytes();
                                 let start = script.len();
                                 let end = start + source_script.len();
-                                if end > script.capacity() {
-                                    panic!("Error: Not enough capacity allocated for compilated script")
-                                }
+                                assert!(
+                                    end <= script.capacity(),
+                                    "Not enough capacity allocated for compilated script"
+                                );
                                 unsafe {
                                     script.set_len(end);
-        
-                                    // Get pointers to the start of the source and destination
+
                                     let src_ptr = source_script.as_ptr();
                                     let dst_ptr = script.as_mut_ptr().add(start);
-        
-                                    std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, source_script.len());
+
+                                    std::ptr::copy_nonoverlapping(
+                                        src_ptr,
+                                        dst_ptr,
+                                        source_script.len(),
+                                    );
                                 }
                             }
                         }
                     }
                 }
-        
+
                 pub fn compile(self) -> ScriptBuf {
                     let mut script = Vec::with_capacity(self.size);
-                    self.compile_to_bytes(&mut script);
+                    let mut cache = HashMap::new();
+                    self.compile_to_bytes(&mut script, &mut cache);
                     ScriptBuf::from_bytes(script)
                 }
-        
+
                 pub fn push_int(self, data: i64) -> Builder {
                     // We can special-case -1, 1-16
                     if data == -1 || (1..=16).contains(&data) {
@@ -283,7 +321,7 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                     let len = write_scriptint(&mut buf, data);
                     self.push_slice(&<&PushBytes>::from(&buf)[..len])
                 }
-        
+
                 pub fn push_slice<T: AsRef<PushBytes>>(mut self, data: T) -> Builder {
                     let script = self.get_script_block();
                     let old_size = script.len();
@@ -291,7 +329,7 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                     self.size += script.len() - old_size;
                     self
                 }
-        
+
                 pub fn push_key(self, key: &::bitcoin::PublicKey) -> Builder {
                     if key.compressed {
                         self.push_slice(key.inner.serialize())
@@ -299,17 +337,17 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                         self.push_slice(key.inner.serialize_uncompressed())
                     }
                 }
-        
+
                 pub fn push_x_only_key(self, x_only_key: &::bitcoin::XOnlyPublicKey) -> Builder {
                     self.push_slice(x_only_key.serialize())
                 }
-        
+
                 pub fn push_expression<T: Pushable>(self, expression: T) -> Builder {
                     let builder = expression.bitcoin_script_push(self);
                     builder
                 }
             }
-        
+
             // We split up the bitcoin_script_push function to allow pushing a single u8 value as
             // an integer (i64), Vec<u8> as raw data and Vec<T> for any T: Pushable object that is
             // not a u8. Otherwise the Vec<u8> and Vec<T: Pushable> definitions conflict.
@@ -374,7 +412,7 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                     NotU8Pushable::bitcoin_script_push(self, builder)
                 }
             }
-        
+
             impl Pushable for u8 {
                 fn bitcoin_script_push(self, builder: Builder) -> Builder {
                     builder.push_int(self as i64)
