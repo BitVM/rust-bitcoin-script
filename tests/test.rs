@@ -1,4 +1,4 @@
-use bitcoin::{opcodes::all::OP_ADD, ScriptBuf};
+use bitcoin::{opcodes::all::OP_ADD};
 use bitcoin_script::{define_pushable, script};
 
 define_pushable!();
@@ -163,7 +163,7 @@ fn test_performance_loop() {
     println!("Subscript size: {}", nested_script.len());
 
     let script = script! {
-        for _ in 0..10 {
+        for _ in 0..1000 {
             {nested_script.clone()}
         }
     };
