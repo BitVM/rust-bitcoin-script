@@ -300,6 +300,15 @@ pub fn define_pushable(_: TokenStream) -> TokenStream {
                     self.compile_to_bytes(&mut script, &mut cache);
                     ScriptBuf::from_bytes(script)
                 }
+                
+                pub fn compile_to_chunks(self) -> Vec<ScriptBuf> {
+                    // Go through the builder and see where we could split
+                    let tolerance = 20000;
+                    let mut script = Vec::with_capacity(self.size);
+                    let mut cache = HashMap::new();
+                    self.compile_to_bytes(&mut script, &mut cache);
+                    ScriptBuf::from_bytes(script)
+                }
 
                 pub fn push_int(self, data: i64) -> Builder {
                     // We can special-case -1, 1-16
