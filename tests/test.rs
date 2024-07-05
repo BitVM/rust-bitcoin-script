@@ -50,7 +50,8 @@ pub mod pushable {
         // Each chunk has to be in the interval [target_chunk_size - tolerance, target_chunk_size]
         target_chunk_size: usize,
         tolerance: usize,
-
+        
+        size: usize,
         pub chunks: Vec<usize>,
 
         // Builder Callstack (current builder and where we chunked it; always pos the call that
@@ -63,6 +64,7 @@ pub mod pushable {
             Chunker {
                 target_chunk_size,
                 tolerance,
+                size: builder.size,
                 chunks: vec![],
                 call_stack: vec![(Box::new(builder), 0)],
             }
@@ -149,8 +151,6 @@ pub mod pushable {
             }
         }
 
-        // TODO: Handle the last chunk because it is allowed to be smaller (probably in a find_chunks
-        // method)
         pub fn find_next_chunk(&mut self) -> Result<(), ChunkerError> {
             // Find the highest still chunkable builder on the call_stack
             let builder_info = self.highest_chunkable_builder()?;
@@ -198,15 +198,12 @@ pub mod pushable {
             }
         }
 
-        //pub fn find_chunks(self, tolerance: usize, target_chunk_size: usize) -> Vec<usize> {
-        //    let i = 0;
-        //    let mut chunks = vec![];
-        //    let mut target_chunk_size = target_chunk_size;
-        //    while i < self.len() {
-        //        chunks.push(self.find_chunk(tolerance as i64, target_chunk_size as i64).try_into().unwrap());
-        //    }
-        //    chunks
-        //}
+        pub fn find_chunks(mut self) -> Result<Vec<usize>, ChunkerError> {
+            while self.size > self.chunks.last().unwrap_or(&0_usize) + self.target_chunk_size {
+                self.find_next_chunk()?;
+            }
+            Ok(self.chunks)
+        }
     }
 
     impl Hash for Builder {
@@ -746,4 +743,25 @@ fn test_chunker_simple() {
         .find_next_chunk()
         .expect("Failed to find second chunk");
     println!("[INFO] chunk positions after fourth chunk: {:?}", chunker.chunks);
+}
+
+#[test]
+fn test_chunker_find_chunks() {
+    let sub_script = script! {
+        OP_ADD
+        OP_ADD
+    };
+
+    let script = script! {
+        { sub_script.clone() }
+        { sub_script.clone() }
+        { sub_script.clone() }
+        { sub_script.clone() }
+        OP_ADD
+    };
+
+    println!("{:?}", script);
+
+    let mut chunker = Chunker::from_builder(script, 2, 0);
+    println!("FINAL CHUNKS: {:?}", chunker.find_chunks().expect("Unable to find chunks"));
 }
