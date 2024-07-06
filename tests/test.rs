@@ -50,7 +50,7 @@ pub mod pushable {
         // Each chunk has to be in the interval [target_chunk_size - tolerance, target_chunk_size]
         target_chunk_size: usize,
         tolerance: usize,
-        
+
         size: usize,
         pub chunks: Vec<usize>,
 
@@ -59,8 +59,14 @@ pub mod pushable {
         call_stack: Vec<(Box<Builder>, usize)>,
     }
 
+    impl From<Chunker> for Builder {
+        fn from(mut chunker: Chunker) -> Self {
+            *chunker.call_stack.remove(0).0
+        }
+    }
+
     impl Chunker {
-        pub fn from_builder(builder: Builder, target_chunk_size: usize, tolerance: usize) -> Self {
+        pub fn new(builder: Builder, target_chunk_size: usize, tolerance: usize) -> Self {
             Chunker {
                 target_chunk_size,
                 tolerance,
@@ -115,7 +121,10 @@ pub mod pushable {
                     Block::Script(script) => script.len(),
                 };
                 current_pos += block_len;
-                println!("[INFO] current pos: {:?} - start_pos: {:?}", current_pos, start_pos);
+                println!(
+                    "[INFO] current pos: {:?} - start_pos: {:?}",
+                    current_pos, start_pos
+                );
                 // The block is already in the previous chunk
                 // (possibly as an overlapping_call but its remaining size is already accounted for
                 // with start_size)
@@ -198,11 +207,12 @@ pub mod pushable {
             }
         }
 
-        pub fn find_chunks(mut self) -> Result<Vec<usize>, ChunkerError> {
+        pub fn find_chunks(mut self) -> Result<(Vec<usize>, Builder), ChunkerError> {
             while self.size > self.chunks.last().unwrap_or(&0_usize) + self.target_chunk_size {
                 self.find_next_chunk()?;
             }
-            Ok(self.chunks)
+            let builder = *self.call_stack.remove(0).0;
+            Ok((self.chunks, builder))
         }
     }
 
@@ -339,6 +349,16 @@ pub mod pushable {
             let mut cache = HashMap::new();
             self.compile_to_bytes(&mut script, &mut cache);
             ScriptBuf::from_bytes(script)
+        }
+
+        pub fn compile_to_chunks(
+            self,
+            target_chunk_size: usize,
+            tolerance: usize,
+        ) -> (Vec<usize>, ScriptBuf) {
+            let chunker = Chunker::new(self, target_chunk_size, tolerance);
+            let (chunks, builder) = chunker.find_chunks().expect("Unable to chunk script");
+            (chunks, builder.compile())
         }
 
         pub fn push_int(self, data: i64) -> Builder {
@@ -710,6 +730,7 @@ fn test_non_optimal_opcodes() {
     );
 }
 
+// TODO: Flesh out the tests or move to own lib? Test with bitvm
 #[test]
 fn test_chunker_simple() {
     let sub_script = script! {
@@ -726,23 +747,35 @@ fn test_chunker_simple() {
 
     println!("{:?}", script);
 
-    let mut chunker = Chunker::from_builder(script, 2, 0);
+    let mut chunker = Chunker::new(script, 2, 0);
     chunker
         .find_next_chunk()
         .expect("Failed to find first chunk");
-    println!("[INFO] chunk positions after first_chunk: {:?}", chunker.chunks);
+    println!(
+        "[INFO] chunk positions after first_chunk: {:?}",
+        chunker.chunks
+    );
     chunker
         .find_next_chunk()
         .expect("Failed to find second chunk");
-    println!("[INFO] chunk positions after second chunk: {:?}", chunker.chunks);
+    println!(
+        "[INFO] chunk positions after second chunk: {:?}",
+        chunker.chunks
+    );
     chunker
         .find_next_chunk()
         .expect("Failed to find second chunk");
-    println!("[INFO] chunk positions after third chunk: {:?}", chunker.chunks);
+    println!(
+        "[INFO] chunk positions after third chunk: {:?}",
+        chunker.chunks
+    );
     chunker
         .find_next_chunk()
         .expect("Failed to find second chunk");
-    println!("[INFO] chunk positions after fourth chunk: {:?}", chunker.chunks);
+    println!(
+        "[INFO] chunk positions after fourth chunk: {:?}",
+        chunker.chunks
+    );
 }
 
 #[test]
@@ -762,6 +795,37 @@ fn test_chunker_find_chunks() {
 
     println!("{:?}", script);
 
-    let mut chunker = Chunker::from_builder(script, 2, 0);
-    println!("FINAL CHUNKS: {:?}", chunker.find_chunks().expect("Unable to find chunks"));
+    let chunker = Chunker::new(script, 2, 0);
+    println!(
+        "FINAL CHUNKS: {:?}",
+        chunker.find_chunks().expect("Unable to find chunks")
+    );
+}
+
+#[test]
+fn test_compile_to_chunks() {
+    let sub_script = script! {
+        OP_ADD
+        OP_ADD
+    };
+
+    let script = script! {
+        { sub_script.clone() }
+        { sub_script.clone() }
+        { sub_script.clone() }
+        { sub_script.clone() }
+        OP_ADD
+    };
+
+    println!("{:?}", script);
+    let (chunks, compiled_script) = script.compile_to_chunks(2, 0);
+    println!(
+        "[RESULT] compiled_script: {:?}, chunks: {:?}",
+        compiled_script, chunks
+    );
+    assert_eq!(chunks, vec![2, 4, 6, 8]);
+    assert_eq!(
+        compiled_script.as_bytes(),
+        vec![147, 147, 147, 147, 147, 147, 147, 147, 147]
+    );
 }
