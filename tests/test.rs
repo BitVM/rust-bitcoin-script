@@ -1,6 +1,5 @@
 use bitcoin::opcodes::all::OP_ADD;
-use script_macro::script;
-use bitcoin_script::{pushable, pushable::Chunker};
+use bitcoin_script::{script, Script, Chunker};
 
 #[test]
 fn test_generic() {
@@ -80,7 +79,7 @@ fn test_minimal_byte_opcode() {
     );
 }
 
-fn script_from_func() -> pushable::Builder {
+fn script_from_func() -> Script {
     script! { OP_ADD }
 }
 

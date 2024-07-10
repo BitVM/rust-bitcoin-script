@@ -4,7 +4,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, quote_spanned};
 
 pub fn generate(syntax: Vec<(Syntax, Span)>) -> TokenStream {
-    let mut tokens = quote!(pushable::Builder::new());
+    let mut tokens = quote!(::bitcoin_script::Script::new());
 
     for (item, span) in syntax {
         let push = match item {
