@@ -1,8 +1,6 @@
 use bitcoin::opcodes::all::OP_ADD;
-use bitcoin_script::{define_pushable, script};
-use pushable::Chunker;
-
-define_pushable!();
+use script_macro::script;
+use bitcoin_script::{pushable, pushable::Chunker};
 
 #[test]
 fn test_generic() {
