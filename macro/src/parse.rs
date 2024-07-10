@@ -101,7 +101,7 @@ where
 {
     // Use a Vec here to get rid of warnings when the variable is overwritten
     let mut escape = quote! {
-        let mut script_var = pushable::Builder::new();
+        let mut script_var = bitcoin_script::Script::new();
     };
     escape.extend(std::iter::once(token.clone()));
 
@@ -142,7 +142,7 @@ where
     T: Iterator<Item = TokenTree>,
 {
     let mut escape = quote! {
-        let mut script_var = pushable::Builder::new();
+        let mut script_var = bitcoin_script::Script::new();
     };
     escape.extend(std::iter::once(token.clone()));
 
