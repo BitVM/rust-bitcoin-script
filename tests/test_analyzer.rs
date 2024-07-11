@@ -8,7 +8,7 @@ fn test_plain() {
         OP_ADD
         OP_ADD
     );
-    let (x, y) = script.analyze_stack();
+    let (x, y) = script.get_stack();
     assert_eq!(x, -4);
     assert_eq!(y, -3);
 }
@@ -51,7 +51,7 @@ fn test_deepthest() {
         {inner_fn1()}
         OP_ADD
     );
-    let (x, y) = script.analyze_stack();
+    let (x, y) = script.get_stack();
     assert_eq!([x, y], [-11, -3]);
 
     let mut script = script! (
@@ -59,7 +59,7 @@ fn test_deepthest() {
      {inner_fn2()}
      OP_ADD
     );
-    let (x, y) = script.analyze_stack();
+    let (x, y) = script.get_stack();
     assert_eq!([x, y], [0, 1]);
 }
 
@@ -72,6 +72,6 @@ fn test_deepthest2() {
             OP_ADD
         OP_ENDIF
     );
-    let (x, y) = script.analyze_stack();
+    let (x, y) = script.get_stack();
     assert_eq!([x, y], [-1, 0]);
 }
