@@ -1,7 +1,8 @@
 use crate::builder::{Block, Builder};
 use bitcoin::blockdata::opcodes::Opcode;
-use bitcoin::blockdata::script::Instruction;
+use bitcoin::blockdata::script::{read_scriptint, Instruction};
 use bitcoin::opcodes::all::*;
+use bitcoin::script::PushBytes;
 use std::cmp::min;
 
 #[derive(Debug, Clone)]
@@ -39,7 +40,7 @@ impl StackAnalyzer {
                         .script_map
                         .get_mut(id)
                         .expect("Missing entry for a called script");
-                    self.handle_sub_script(called_script.analyze_stack());
+                    self.handle_sub_script(called_script.get_stack());
                 }
                 Block::Script(block_script) => {
                     for instruct in block_script.instructions().into_iter() {
@@ -49,11 +50,7 @@ impl StackAnalyzer {
                             }
                             Ok(x) => match x {
                                 Instruction::PushBytes(bytes) => {
-                                    if bytes.as_bytes().len() == 1 {
-                                        // u8 -> i64
-                                        self.handle_int(bytes.as_bytes()[0] as i64);
-                                    }
-                                    self.handle_push_slice();
+                                    self.handle_push_slice(bytes);
                                 }
                                 Instruction::Op(opcode) => {
                                     self.handle_opcode(opcode);
@@ -67,16 +64,18 @@ impl StackAnalyzer {
         (self.deepest_stack_accessed, self.stack_changed)
     }
 
-    pub fn handle_int(&mut self, x: i64) {
-        // if i64(data) < 1000, last_constant is true
-        if x <= 1000 && x >= 0 {
-            self.last_constant = Some(x);
-        } else {
-            self.last_constant = None;
+    pub fn handle_push_slice(&mut self, bytes: &PushBytes) {
+        match read_scriptint(bytes.as_bytes()) {
+            Ok(x) => {
+                // if i64(data) < 1000, last_constant is true
+                if x <= 1000 && x >= 0 {
+                    self.last_constant = Some(x);
+                } else {
+                    self.last_constant = None;
+                }
+            }
+            Err(_) => {}
         }
-    }
-
-    pub fn handle_push_slice(&mut self) {
         self.stack_change((0, 1));
     }
 

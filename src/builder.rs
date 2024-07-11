@@ -184,7 +184,18 @@ impl Builder {
         (chunks, builder.compile())
     }
 
-    pub fn analyze_stack(&mut self) -> (i32, i32) {
+    pub fn analyze_stack(mut self) -> Self {
+        match self.stack_hint {
+            Some(_) => self,
+            None => {
+                let mut analyzer = StackAnalyzer::new();
+                analyzer.analyze(&mut self);
+                self
+            }
+        }
+    }
+
+    pub fn get_stack(&mut self) -> (i32, i32) {
         match self.stack_hint {
             Some(x) => x,
             None => {
