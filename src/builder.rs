@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
+use crate::analyzer::StackAnalyzer;
 use crate::chunker::Chunker;
 
 #[derive(Clone, Debug, Hash)]
@@ -24,6 +25,8 @@ impl Block {
 #[derive(Clone, Debug)]
 pub struct Builder {
     size: usize,
+    // stack_hint will cache the result of stack analzyer
+    stack_hint: Option<(i32, i32)>,
     pub blocks: Vec<Block>,
     // TODO: It may be worth to lazy initialize the script_map
     pub script_map: HashMap<u64, Builder>,
@@ -53,6 +56,7 @@ impl Builder {
         let blocks = Vec::new();
         Builder {
             size: 0,
+            stack_hint: None,
             blocks,
             script_map: HashMap::new(),
         }
@@ -178,6 +182,22 @@ impl Builder {
         let chunker = Chunker::new(self, target_chunk_size, tolerance);
         let (chunks, builder) = chunker.find_chunks().expect("Unable to chunk script");
         (chunks, builder.compile())
+    }
+
+    pub fn analyze_stack(&mut self) -> (i32, i32) {
+        match self.stack_hint {
+            Some(x) => x,
+            None => {
+                let mut analyzer = StackAnalyzer::new();
+                let (access, change) = analyzer.analyze(self);
+                self.add_stack_hint(access, change);
+                (access, change)
+            }
+        }
+    }
+
+    pub fn add_stack_hint(&mut self, access: i32, changed: i32) {
+        self.stack_hint = Some((access, changed));
     }
 
     pub fn push_int(self, data: i64) -> Builder {
