@@ -15,6 +15,7 @@ pub fn generate(syntax: Vec<(Syntax, Span)>) -> TokenStream {
         };
         tokens.extend(push);
     }
+    // tokens.extend(quote! {.analyze_stack()}); // for debug
     tokens
 }
 
