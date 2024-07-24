@@ -3,19 +3,32 @@ use bitcoin::blockdata::opcodes::Opcode;
 use bitcoin::blockdata::script::{read_scriptint, Instruction};
 use bitcoin::opcodes::all::*;
 use bitcoin::script::PushBytes;
+use bitcoin::ScriptBuf;
+use std::borrow::BorrowMut;
 use std::cmp::min;
+use std::collections::HashMap;
+use std::os::macos::raw::stat;
+use std::panic;
+use std::rc::Rc;
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StackStatus {
+    pub deepest_stack_accessed: i32,
+    pub stack_changed: i32,
+    pub deepest_altstack_accessed: i32,
+    pub altstack_changed: i32,
+}
 
 #[derive(Debug, Clone)]
 enum IfStackEle {
-    IfFlow((i32, i32)),
+    IfFlow(StackStatus),
     // if_flow (deepest_stack_accessed, stack_changed), else_flow(deepest_stack_accessed, stack_changed)
-    ElseFlow((i32, i32, i32, i32)),
+    ElseFlow((StackStatus, StackStatus)),
 }
 
 #[derive(Debug, Clone)]
 pub struct StackAnalyzer {
-    deepest_stack_accessed: i32,
-    stack_changed: i32,
+    stack_status: StackStatus,
     // if_stack should be empty after analyzing
     if_stack: Vec<IfStackEle>,
     // last constant? for handling op_roll and op_pick
@@ -25,14 +38,22 @@ pub struct StackAnalyzer {
 impl StackAnalyzer {
     pub fn new() -> Self {
         StackAnalyzer {
-            deepest_stack_accessed: 0,
-            stack_changed: 0,
+            stack_status: StackStatus::default(),
             if_stack: vec![],
             last_constant: None,
         }
     }
 
-    pub fn analyze(&mut self, builder: &mut Builder) -> (i32, i32) {
+    pub fn analyze_blocks(&mut self, blocks: &mut Vec<Box<Builder>>) -> StackStatus {
+        // println!("===============================");
+        for block in blocks {
+            // Maybe remove this clone?
+            self.handle_sub_script(block.get_stack());
+        }
+        self.get_status()
+    }
+
+    pub fn analyze(&mut self, builder: &mut Builder) -> StackStatus {
         for block in builder.blocks.iter_mut() {
             match block {
                 Block::Call(id) => {
@@ -61,7 +82,7 @@ impl StackAnalyzer {
                 }
             }
         }
-        (self.deepest_stack_accessed, self.stack_changed)
+        self.stack_status.clone()
     }
 
     pub fn handle_push_slice(&mut self, bytes: &PushBytes) {
@@ -76,7 +97,28 @@ impl StackAnalyzer {
             }
             Err(_) => {}
         }
-        self.stack_change((0, 1));
+        self.stack_change(Self::plain_stack_status(0, 1));
+    }
+
+    fn min_status(x: StackStatus, y: StackStatus) -> StackStatus {
+        StackStatus {
+            deepest_altstack_accessed: min(
+                x.deepest_altstack_accessed,
+                y.deepest_altstack_accessed,
+            ),
+            deepest_stack_accessed: min(x.deepest_stack_accessed, y.deepest_stack_accessed),
+            stack_changed: x.stack_changed,
+            altstack_changed: x.altstack_changed,
+        }
+    }
+
+    pub fn plain_stack_status(x: i32, y: i32) -> StackStatus {
+        StackStatus {
+            deepest_stack_accessed: x,
+            stack_changed: y,
+            deepest_altstack_accessed: 0,
+            altstack_changed: 0,
+        }
     }
 
     pub fn handle_opcode(&mut self, opcode: Opcode) {
@@ -84,32 +126,46 @@ impl StackAnalyzer {
         match opcode {
             OP_IF | OP_NOTIF => {
                 self.stack_change(Self::opcode_stack_table(&opcode));
-                self.if_stack.push(IfStackEle::IfFlow((0, 0)));
+                self.if_stack.push(IfStackEle::IfFlow(Default::default()));
             }
             OP_ELSE => match self.if_stack.pop().unwrap() {
-                IfStackEle::IfFlow((i, j)) => {
-                    self.if_stack.push(IfStackEle::ElseFlow((i, j, 0, 0)));
+                IfStackEle::IfFlow(i) => {
+                    self.if_stack
+                        .push(IfStackEle::ElseFlow((i, Default::default())));
                 }
                 IfStackEle::ElseFlow(_) => {
                     panic!("shouldn't happend")
                 }
             },
             OP_ENDIF => match self.if_stack.pop().unwrap() {
-                IfStackEle::IfFlow((i, j)) => {
-                    assert_eq!(j, 0, "only_if_flow shouldn't change stack status");
-                    self.stack_change((i, j));
-                }
-                IfStackEle::ElseFlow((i, j, x, y)) => {
+                IfStackEle::IfFlow(stack_status) => {
                     assert_eq!(
-                        j, y,
+                        stack_status.stack_changed, 0,
+                        "only_if_flow shouldn't change stack status {:?}",
+                        stack_status
+                    );
+                    assert_eq!(
+                        stack_status.altstack_changed, 0,
+                        "only_if_flow shouldn't change alt stack status {:?},",
+                        stack_status
+                    );
+                    self.stack_change(stack_status);
+                }
+                IfStackEle::ElseFlow((stack_status1, stack_status2)) => {
+                    assert_eq!(
+                        stack_status1.stack_changed, stack_status2.stack_changed,
                         "if_flow and else_flow should change stack in the same way"
                     );
-                    self.stack_change((min(i, x), j));
+                    assert_eq!(
+                        stack_status1.altstack_changed, stack_status2.altstack_changed,
+                        "if_flow and else_flow should change alt stack in the same way"
+                    );
+                    self.stack_change(Self::min_status(stack_status1, stack_status2));
                 }
             },
             OP_PICK => match self.last_constant {
                 Some(x) => {
-                    self.stack_change((-1 * (x + 1) as i32, 0));
+                    self.stack_change(Self::plain_stack_status(-1 * (x + 1 + 1) as i32, 0));
                 }
                 None => {
                     panic!("need to be handled manually for op_pick")
@@ -117,7 +173,8 @@ impl StackAnalyzer {
             },
             OP_ROLL => match self.last_constant {
                 Some(x) => {
-                    self.stack_change((-1 * (x + 1) as i32, -1));
+                    self.stack_change(Self::plain_stack_status(-1 * (x + 1 + 1) as i32, -1));
+                    // for [x2, x1, x0, 2, OP_PICK]
                 }
                 None => {
                     panic!("need to be handled manually for op_roll")
@@ -138,38 +195,45 @@ impl StackAnalyzer {
         }
     }
 
-    pub fn handle_sub_script(&mut self, (access, change): (i32, i32)) {
+    pub fn handle_sub_script(&mut self, stack_status: StackStatus) {
         self.last_constant = None;
-        self.stack_change((access, change));
+        self.stack_change(stack_status);
     }
 
-    pub fn get_status(&self) -> (i32, i32) {
+    pub fn get_status(&self) -> StackStatus {
         assert!(self.if_stack.is_empty(), "if stack is not empty");
-        (self.deepest_stack_accessed, self.stack_changed)
+        self.stack_status.clone()
     }
 
-    fn stack_change(&mut self, (access, change): (i32, i32)) {
+    fn stack_change(&mut self, stack_status: StackStatus) {
+        let status;
         match self.if_stack.last_mut() {
             None => {
-                self.deepest_stack_accessed =
-                    min(self.deepest_stack_accessed, access + self.stack_changed);
-                self.stack_changed = self.stack_changed + change;
+                status = self.stack_status.borrow_mut();
             }
-            Some(IfStackEle::IfFlow((i, j))) => {
-                *i = min(*i, (*j) + access);
-                *j = *j + change
+            Some(IfStackEle::IfFlow(stack_status)) => {
+                status = stack_status.borrow_mut();
             }
-            Some(IfStackEle::ElseFlow((_, _, x, y))) => {
-                *x = min(*x, (*y) + access);
-                *y = *y + change
+            Some(IfStackEle::ElseFlow((_, stack_status))) => {
+                status = stack_status.borrow_mut();
             }
         }
+        let i = status.deepest_stack_accessed.borrow_mut();
+        let j = status.stack_changed.borrow_mut();
+        let x = status.deepest_altstack_accessed.borrow_mut();
+        let y = status.altstack_changed.borrow_mut();
+
+        *i = min(*i, (*j) + stack_status.deepest_stack_accessed);
+        *j = *j + stack_status.stack_changed;
+
+        *x = min(*x, (*y) + stack_status.deepest_altstack_accessed);
+        *y = *y + stack_status.altstack_changed;
     }
 
     /// the first return is deepest access to current stack
     /// the second return is the impact for the stack
-    fn opcode_stack_table(data: &Opcode) -> (i32, i32) {
-        match data.clone() {
+    fn opcode_stack_table(data: &Opcode) -> StackStatus {
+        let (i, j) = match data.clone() {
             OP_PUSHBYTES_0 | OP_PUSHBYTES_1 | OP_PUSHBYTES_2 | OP_PUSHBYTES_3 | OP_PUSHBYTES_4
             | OP_PUSHBYTES_5 | OP_PUSHBYTES_6 | OP_PUSHBYTES_7 | OP_PUSHBYTES_8
             | OP_PUSHBYTES_9 | OP_PUSHBYTES_10 | OP_PUSHBYTES_11 | OP_PUSHBYTES_12
@@ -252,6 +316,18 @@ impl StackAnalyzer {
             _ => {
                 panic!("not implemantation")
             }
+        };
+
+        let (x, y) = match data.clone() {
+            OP_FROMALTSTACK => (-1, -1),
+            OP_TOALTSTACK => (0, 1),
+            _ => (0, 0),
+        };
+        StackStatus {
+            deepest_stack_accessed: i,
+            stack_changed: j,
+            deepest_altstack_accessed: x,
+            altstack_changed: y,
         }
     }
 }
