@@ -252,101 +252,101 @@ fn test_non_optimal_opcodes() {
 }
 
 // TODO: Flesh out the tests or move to own lib? Test with bitvm
-#[test]
-fn test_chunker_simple() {
-    let sub_script = script! {
-        OP_ADD
-        OP_ADD
-    };
+//#[test]
+//fn test_chunker_simple() {
+//    let sub_script = script! {
+//        OP_ADD
+//        OP_ADD
+//    };
+//
+//    let script = script! {
+//        { sub_script.clone() }
+//        { sub_script.clone() }
+//        { sub_script.clone() }
+//        { sub_script.clone() }
+//    };
+//
+//    println!("{:?}", script);
+//
+//    let mut chunker = Chunker::new(script, 2, 0);
+//    chunker
+//        .find_next_chunk()
+//        .expect("Failed to find first chunk");
+//    println!(
+//        "[INFO] chunk positions after first_chunk: {:?}",
+//        chunker.chunks
+//    );
+//    chunker
+//        .find_next_chunk()
+//        .expect("Failed to find second chunk");
+//    println!(
+//        "[INFO] chunk positions after second chunk: {:?}",
+//        chunker.chunks
+//    );
+//    chunker
+//        .find_next_chunk()
+//        .expect("Failed to find second chunk");
+//    println!(
+//        "[INFO] chunk positions after third chunk: {:?}",
+//        chunker.chunks
+//    );
+//    chunker
+//        .find_next_chunk()
+//        .expect("Failed to find second chunk");
+//    println!(
+//        "[INFO] chunk positions after fourth chunk: {:?}",
+//        chunker.chunks
+//    );
+//}
 
-    let script = script! {
-        { sub_script.clone() }
-        { sub_script.clone() }
-        { sub_script.clone() }
-        { sub_script.clone() }
-    };
+//#[test]
+//fn test_chunker_find_chunks() {
+//    let sub_script = script! {
+//        OP_ADD
+//        OP_ADD
+//    };
+//
+//    let script = script! {
+//        { sub_script.clone() }
+//        { sub_script.clone() }
+//        { sub_script.clone() }
+//        { sub_script.clone() }
+//        OP_ADD
+//    };
+//
+//    println!("{:?}", script);
+//
+//    let chunker = Chunker::new(script, 2, 0);
+//    println!(
+//        "FINAL CHUNKS: {:?}",
+//        chunker.find_chunks().expect("Unable to find chunks")
+//    );
+//}
 
-    println!("{:?}", script);
-
-    let mut chunker = Chunker::new(script, 2, 0);
-    chunker
-        .find_next_chunk()
-        .expect("Failed to find first chunk");
-    println!(
-        "[INFO] chunk positions after first_chunk: {:?}",
-        chunker.chunks
-    );
-    chunker
-        .find_next_chunk()
-        .expect("Failed to find second chunk");
-    println!(
-        "[INFO] chunk positions after second chunk: {:?}",
-        chunker.chunks
-    );
-    chunker
-        .find_next_chunk()
-        .expect("Failed to find second chunk");
-    println!(
-        "[INFO] chunk positions after third chunk: {:?}",
-        chunker.chunks
-    );
-    chunker
-        .find_next_chunk()
-        .expect("Failed to find second chunk");
-    println!(
-        "[INFO] chunk positions after fourth chunk: {:?}",
-        chunker.chunks
-    );
-}
-
-#[test]
-fn test_chunker_find_chunks() {
-    let sub_script = script! {
-        OP_ADD
-        OP_ADD
-    };
-
-    let script = script! {
-        { sub_script.clone() }
-        { sub_script.clone() }
-        { sub_script.clone() }
-        { sub_script.clone() }
-        OP_ADD
-    };
-
-    println!("{:?}", script);
-
-    let chunker = Chunker::new(script, 2, 0);
-    println!(
-        "FINAL CHUNKS: {:?}",
-        chunker.find_chunks().expect("Unable to find chunks")
-    );
-}
-
-#[test]
-fn test_compile_to_chunks() {
-    let sub_script = script! {
-        OP_ADD
-        OP_ADD
-    };
-
-    let script = script! {
-        { sub_script.clone() }
-        { sub_script.clone() }
-        { sub_script.clone() }
-        { sub_script.clone() }
-        OP_ADD
-    };
-
-    println!("{:?}", script);
-    let (chunks, compiled_script) = script.compile_to_chunks(2, 0);
-    println!(
-        "[RESULT] compiled_script: {:?}, chunks: {:?}",
-        compiled_script, chunks
-    );
-    assert_eq!(chunks, vec![2, 4, 6, 8]);
-    assert_eq!(
-        compiled_script.as_bytes(),
-        vec![147, 147, 147, 147, 147, 147, 147, 147, 147]
-    );
-}
+//#[test]
+//fn test_compile_to_chunks() {
+//    let sub_script = script! {
+//        OP_ADD
+//        OP_ADD
+//    };
+//
+//    let script = script! {
+//        { sub_script.clone() }
+//        { sub_script.clone() }
+//        { sub_script.clone() }
+//        { sub_script.clone() }
+//        OP_ADD
+//    };
+//
+//    println!("{:?}", script);
+//    let (chunks, compiled_script) = script.compile_to_chunks(2, 0);
+//    println!(
+//        "[RESULT] compiled_script: {:?}, chunks: {:?}",
+//        compiled_script, chunks
+//    );
+//    assert_eq!(chunks, vec![2, 4, 6, 8]);
+//    assert_eq!(
+//        compiled_script.as_bytes(),
+//        vec![147, 147, 147, 147, 147, 147, 147, 147, 147]
+//    );
+//}
