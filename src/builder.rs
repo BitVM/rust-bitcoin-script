@@ -32,12 +32,6 @@ pub struct Builder {
     pub script_map: HashMap<u64, Builder>,
 }
 
-impl From<Chunker> for Builder {
-    fn from(mut chunker: Chunker) -> Self {
-        *chunker.call_stack.remove(0).0
-    }
-}
-
 impl Hash for Builder {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.size.hash(state);
@@ -89,6 +83,12 @@ impl Builder {
         self.size += 1;
         let script = self.get_script_block();
         script.push_opcode(data);
+        self
+    }
+
+    pub fn push_script(mut self, data: ScriptBuf) -> Builder {
+        self.size += data.len();
+        self.blocks.push(Block::Script(data));
         self
     }
 
@@ -178,10 +178,20 @@ impl Builder {
         self,
         target_chunk_size: usize,
         tolerance: usize,
-    ) -> (Vec<usize>, ScriptBuf) {
-        let chunker = Chunker::new(self, target_chunk_size, tolerance);
-        let (chunks, builder) = chunker.find_chunks().expect("Unable to chunk script");
-        (chunks, builder.compile())
+    ) -> (Vec<usize>, Vec<ScriptBuf>) {
+        let mut chunker = Chunker::new(self, target_chunk_size, tolerance);
+        let chunk_sizes = chunker.find_chunks();
+        let mut chunk_sizes_iter = chunk_sizes.iter();
+        let mut scripts = vec![];
+        for chunk in chunker.chunks {
+            let mut script = Vec::with_capacity(*chunk_sizes_iter.next().expect("Less chunk sizes than there are chunks"));
+            for builder in chunk {
+                let mut cache = HashMap::new();
+                builder.compile_to_bytes(&mut script, &mut cache);
+            }
+            scripts.push(script.into());
+        }
+        (chunk_sizes, scripts)
     }
 
     pub fn analyze_stack(mut self) -> Self {
