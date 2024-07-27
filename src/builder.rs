@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use crate::analyzer::StackAnalyzer;
+use crate::analyzer::{StackAnalyzer, StackStatus};
 use crate::chunker::Chunker;
 
 #[derive(Clone, Debug, Hash)]
@@ -26,7 +26,7 @@ impl Block {
 pub struct Builder {
     size: usize,
     // stack_hint will cache the result of stack analzyer
-    stack_hint: Option<(i32, i32)>,
+    stack_hint: Option<StackStatus>,
     pub blocks: Vec<Block>,
     // TODO: It may be worth to lazy initialize the script_map
     pub script_map: HashMap<u64, Builder>,
@@ -184,7 +184,11 @@ impl Builder {
         let mut chunk_sizes_iter = chunk_sizes.iter();
         let mut scripts = vec![];
         for chunk in chunker.chunks {
-            let mut script = Vec::with_capacity(*chunk_sizes_iter.next().expect("Less chunk sizes than there are chunks"));
+            let mut script = Vec::with_capacity(
+                *chunk_sizes_iter
+                    .next()
+                    .expect("Less chunk sizes than there are chunks"),
+            );
             for builder in chunk {
                 let mut cache = HashMap::new();
                 builder.compile_to_bytes(&mut script, &mut cache);
@@ -205,20 +209,20 @@ impl Builder {
         }
     }
 
-    pub fn get_stack(&mut self) -> (i32, i32) {
-        match self.stack_hint {
-            Some(x) => x,
+    pub fn get_stack(&mut self) -> StackStatus {
+        match &self.stack_hint {
+            Some(x) => x.clone(),
             None => {
                 let mut analyzer = StackAnalyzer::new();
-                let (access, change) = analyzer.analyze(self);
-                self.add_stack_hint(access, change);
-                (access, change)
+                let stack_status = analyzer.analyze(self);
+                self.stack_hint = Some(stack_status.clone());
+                stack_status
             }
         }
     }
 
     pub fn add_stack_hint(&mut self, access: i32, changed: i32) {
-        self.stack_hint = Some((access, changed));
+        self.stack_hint = Some(StackAnalyzer::plain_stack_status(access, changed));
     }
 
     pub fn push_int(self, data: i64) -> Builder {

@@ -1,6 +1,9 @@
+use crate::{
+    analyzer::StackStatus,
+    builder::{Block, Builder},
+    StackAnalyzer,
+};
 use core::fmt;
-
-use crate::builder::{Block, Builder};
 
 #[derive(Debug, Clone)]
 pub struct ChunkerError;
@@ -34,6 +37,40 @@ impl Chunker {
         }
     }
 
+    pub fn find_chunks_and_analyze_stack(&mut self) -> Vec<(usize, usize, usize, usize, usize)> {
+        let mut chunks = vec![];
+        while !self.call_stack.is_empty() {
+            let chunk = self.find_next_chunk();
+            chunks.push(chunk);
+        }
+        let mut result = vec![];
+        for chunk in chunks.iter_mut() {
+            let chunk_size = chunk.1;
+            // println!("chunk size: {}", chunk_size);
+            let status = self.stack_analyze(&mut chunk.0);
+            // println!("stack_analyze: {:?}", status);
+            // ((-1 * access) as u32, (depth - access) as u32)
+            let stack_input_size = (-1 * status.deepest_stack_accessed) as usize;
+            let stack_output_size = (status.stack_changed - status.deepest_stack_accessed) as usize;
+            let altstack_input_size = (-1 * status.deepest_altstack_accessed) as usize;
+            let altstack_output_size =
+                (status.altstack_changed - status.deepest_altstack_accessed) as usize;
+            result.push((
+                chunk_size,
+                stack_input_size,
+                stack_output_size,
+                altstack_input_size,
+                altstack_output_size,
+            ));
+        }
+        result
+    }
+
+    fn stack_analyze(&self, chunk: &mut Vec<Box<Builder>>) -> StackStatus {
+        let mut stack_analyzer = StackAnalyzer::new();
+        stack_analyzer.analyze_blocks(chunk)
+    }
+
     fn find_next_chunk(&mut self) -> (Vec<Box<Builder>>, usize) {
         let mut result = vec![];
         let mut result_len = 0;
@@ -54,15 +91,15 @@ impl Chunker {
                     match block {
                         Block::Call(id) => {
                             let sub_builder = builder.script_map.get(&id).unwrap();
-                            self.call_stack
-                                .push(Box::new(sub_builder.clone())); //TODO: Avoid cloning here by
-                                                                      //putting Box<Builder> into
-                                                                      //the script_map
+                            self.call_stack.push(Box::new(sub_builder.clone())); //TODO: Avoid cloning here by
+                                                                                 //putting Box<Builder> into
+                                                                                 //the script_map
                             contains_call = true;
                         }
                         Block::Script(script_buf) => {
                             //TODO: Can we avoid cloning or creating a builder here?
-                            self.call_stack.push(Box::new(Builder::new().push_script(script_buf.clone())));
+                            self.call_stack
+                                .push(Box::new(Builder::new().push_script(script_buf.clone())));
                         }
                     }
                 }
