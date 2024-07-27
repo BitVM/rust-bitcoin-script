@@ -1,4 +1,4 @@
-use crate::builder::{Block, Builder};
+use crate::builder::{Block, StructuredScript};
 use bitcoin::blockdata::opcodes::Opcode;
 use bitcoin::blockdata::script::{read_scriptint, Instruction};
 use bitcoin::opcodes::all::*;
@@ -40,7 +40,7 @@ impl StackAnalyzer {
         }
     }
 
-    pub fn analyze_blocks(&mut self, blocks: &mut Vec<Box<Builder>>) -> StackStatus {
+    pub fn analyze_blocks(&mut self, blocks: &mut Vec<Box<StructuredScript>>) -> StackStatus {
         // println!("===============================");
         for block in blocks {
             // Maybe remove this clone?
@@ -49,7 +49,7 @@ impl StackAnalyzer {
         self.get_status()
     }
 
-    pub fn analyze(&mut self, builder: &mut Builder) -> StackStatus {
+    pub fn analyze(&mut self, builder: &mut StructuredScript) -> StackStatus {
         for block in builder.blocks.iter_mut() {
             match block {
                 Block::Call(id) => {

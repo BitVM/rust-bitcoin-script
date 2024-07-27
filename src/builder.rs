@@ -23,16 +23,16 @@ impl Block {
 }
 
 #[derive(Clone, Debug)]
-pub struct Builder {
+pub struct StructuredScript {
     size: usize,
     // stack_hint will cache the result of stack analzyer
     stack_hint: Option<StackStatus>,
     pub blocks: Vec<Block>,
     // TODO: It may be worth to lazy initialize the script_map
-    pub script_map: HashMap<u64, Builder>,
+    pub script_map: HashMap<u64, StructuredScript>,
 }
 
-impl Hash for Builder {
+impl Hash for StructuredScript {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.size.hash(state);
         self.blocks.hash(state);
@@ -45,10 +45,10 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
     hasher.finish()
 }
 
-impl Builder {
+impl StructuredScript {
     pub fn new() -> Self {
         let blocks = Vec::new();
-        Builder {
+        StructuredScript {
             size: 0,
             stack_hint: None,
             blocks,
@@ -79,20 +79,20 @@ impl Builder {
         }
     }
 
-    pub fn push_opcode(mut self, data: Opcode) -> Builder {
+    pub fn push_opcode(mut self, data: Opcode) -> StructuredScript {
         self.size += 1;
         let script = self.get_script_block();
         script.push_opcode(data);
         self
     }
 
-    pub fn push_script(mut self, data: ScriptBuf) -> Builder {
+    pub fn push_script(mut self, data: ScriptBuf) -> StructuredScript {
         self.size += data.len();
         self.blocks.push(Block::Script(data));
         self
     }
 
-    pub fn push_env_script(mut self, data: Builder) -> Builder {
+    pub fn push_env_script(mut self, data: StructuredScript) -> StructuredScript {
         self.size += data.size;
         let id = calculate_hash(&data);
         self.blocks.push(Block::Call(id));
@@ -225,7 +225,7 @@ impl Builder {
         self.stack_hint = Some(StackAnalyzer::plain_stack_status(access, changed));
     }
 
-    pub fn push_int(self, data: i64) -> Builder {
+    pub fn push_int(self, data: i64) -> StructuredScript {
         // We can special-case -1, 1-16
         if data == -1 || (1..=16).contains(&data) {
             let opcode = Opcode::from((data - 1 + OP_TRUE.to_u8() as i64) as u8);
@@ -240,13 +240,13 @@ impl Builder {
             self.push_int_non_minimal(data)
         }
     }
-    fn push_int_non_minimal(self, data: i64) -> Builder {
+    fn push_int_non_minimal(self, data: i64) -> StructuredScript {
         let mut buf = [0u8; 8];
         let len = write_scriptint(&mut buf, data);
         self.push_slice(&<&PushBytes>::from(&buf)[..len])
     }
 
-    pub fn push_slice<T: AsRef<PushBytes>>(mut self, data: T) -> Builder {
+    pub fn push_slice<T: AsRef<PushBytes>>(mut self, data: T) -> StructuredScript {
         let script = self.get_script_block();
         let old_size = script.len();
         script.push_slice(data);
@@ -254,7 +254,7 @@ impl Builder {
         self
     }
 
-    pub fn push_key(self, key: &::bitcoin::PublicKey) -> Builder {
+    pub fn push_key(self, key: &::bitcoin::PublicKey) -> StructuredScript {
         if key.compressed {
             self.push_slice(key.inner.serialize())
         } else {
@@ -262,11 +262,11 @@ impl Builder {
         }
     }
 
-    pub fn push_x_only_key(self, x_only_key: &::bitcoin::XOnlyPublicKey) -> Builder {
+    pub fn push_x_only_key(self, x_only_key: &::bitcoin::XOnlyPublicKey) -> StructuredScript {
         self.push_slice(x_only_key.serialize())
     }
 
-    pub fn push_expression<T: Pushable>(self, expression: T) -> Builder {
+    pub fn push_expression<T: Pushable>(self, expression: T) -> StructuredScript {
         let builder = expression.bitcoin_script_push(self);
         builder
     }
@@ -276,51 +276,51 @@ impl Builder {
 // an integer (i64), Vec<u8> as raw data and Vec<T> for any T: Pushable object that is
 // not a u8. Otherwise the Vec<u8> and Vec<T: Pushable> definitions conflict.
 trait NotU8Pushable {
-    fn bitcoin_script_push(self, builder: Builder) -> Builder;
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript;
 }
 impl NotU8Pushable for i64 {
-    fn bitcoin_script_push(self, builder: Builder) -> Builder {
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
         builder.push_int(self)
     }
 }
 impl NotU8Pushable for i32 {
-    fn bitcoin_script_push(self, builder: Builder) -> Builder {
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
         builder.push_int(self as i64)
     }
 }
 impl NotU8Pushable for u32 {
-    fn bitcoin_script_push(self, builder: Builder) -> Builder {
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
         builder.push_int(self as i64)
     }
 }
 impl NotU8Pushable for usize {
-    fn bitcoin_script_push(self, builder: Builder) -> Builder {
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
         builder
             .push_int(i64::try_from(self).unwrap_or_else(|_| panic!("Usize does not fit in i64")))
     }
 }
 impl NotU8Pushable for Vec<u8> {
-    fn bitcoin_script_push(self, builder: Builder) -> Builder {
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
         builder.push_slice(PushBytesBuf::try_from(self).unwrap())
     }
 }
 impl NotU8Pushable for ::bitcoin::PublicKey {
-    fn bitcoin_script_push(self, builder: Builder) -> Builder {
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
         builder.push_key(&self)
     }
 }
 impl NotU8Pushable for ::bitcoin::XOnlyPublicKey {
-    fn bitcoin_script_push(self, builder: Builder) -> Builder {
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
         builder.push_x_only_key(&self)
     }
 }
-impl NotU8Pushable for Builder {
-    fn bitcoin_script_push(self, builder: Builder) -> Builder {
+impl NotU8Pushable for StructuredScript {
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
         builder.push_env_script(self)
     }
 }
 impl<T: NotU8Pushable> NotU8Pushable for Vec<T> {
-    fn bitcoin_script_push(self, mut builder: Builder) -> Builder {
+    fn bitcoin_script_push(self, mut builder: StructuredScript) -> StructuredScript {
         for pushable in self {
             builder = pushable.bitcoin_script_push(builder);
         }
@@ -328,16 +328,16 @@ impl<T: NotU8Pushable> NotU8Pushable for Vec<T> {
     }
 }
 pub trait Pushable {
-    fn bitcoin_script_push(self, builder: Builder) -> Builder;
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript;
 }
 impl<T: NotU8Pushable> Pushable for T {
-    fn bitcoin_script_push(self, builder: Builder) -> Builder {
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
         NotU8Pushable::bitcoin_script_push(self, builder)
     }
 }
 
 impl Pushable for u8 {
-    fn bitcoin_script_push(self, builder: Builder) -> Builder {
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
         builder.push_int(self as i64)
     }
 }
