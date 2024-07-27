@@ -189,7 +189,7 @@ impl Builder {
                     .next()
                     .expect("Less chunk sizes than there are chunks"),
             );
-            for builder in chunk {
+            for builder in chunk.scripts() {
                 let mut cache = HashMap::new();
                 builder.compile_to_bytes(&mut script, &mut cache);
             }

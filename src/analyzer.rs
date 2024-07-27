@@ -3,13 +3,9 @@ use bitcoin::blockdata::opcodes::Opcode;
 use bitcoin::blockdata::script::{read_scriptint, Instruction};
 use bitcoin::opcodes::all::*;
 use bitcoin::script::PushBytes;
-use bitcoin::ScriptBuf;
 use std::borrow::BorrowMut;
 use std::cmp::min;
-use std::collections::HashMap;
-use std::os::macos::raw::stat;
 use std::panic;
-use std::rc::Rc;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StackStatus {
