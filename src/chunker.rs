@@ -1,6 +1,6 @@
 use crate::{
     analyzer::StackStatus,
-    builder::{Block, Builder},
+    builder::{Block, StructuredScript},
     StackAnalyzer,
 };
 
@@ -15,13 +15,13 @@ struct ChunkStats {
 
 #[derive(Debug, Clone)]
 pub struct Chunk {
-    scripts: Vec<Box<Builder>>,
+    scripts: Vec<Box<StructuredScript>>,
     size: usize,
     stats: Option<ChunkStats>,
 }
 
 impl Chunk {
-    pub fn new(scripts: Vec<Box<Builder>>, size: usize) -> Chunk {
+    pub fn new(scripts: Vec<Box<StructuredScript>>, size: usize) -> Chunk {
         Chunk {
             scripts,
             size,
@@ -29,7 +29,7 @@ impl Chunk {
         }
     }
 
-    pub fn scripts(self) -> Vec<Box<Builder>>{
+    pub fn scripts(self) -> Vec<Box<StructuredScript>>{
         self.scripts
     }
 }
@@ -43,11 +43,11 @@ pub struct Chunker {
     pub chunks: Vec<Chunk>,
 
     // Builder Callstack (consists of remaining structured scripts)
-    pub call_stack: Vec<Box<Builder>>,
+    pub call_stack: Vec<Box<StructuredScript>>,
 }
 
 impl Chunker {
-    pub fn new(builder: Builder, target_chunk_size: usize, tolerance: usize) -> Self {
+    pub fn new(builder: StructuredScript, target_chunk_size: usize, tolerance: usize) -> Self {
         Chunker {
             target_chunk_size,
             tolerance,
@@ -83,7 +83,7 @@ impl Chunker {
         chunks
     }
 
-    fn stack_analyze(&self, chunk: &mut Vec<Box<Builder>>) -> StackStatus {
+    fn stack_analyze(&self, chunk: &mut Vec<Box<StructuredScript>>) -> StackStatus {
         let mut stack_analyzer = StackAnalyzer::new();
         stack_analyzer.analyze_blocks(chunk)
     }
@@ -120,7 +120,7 @@ impl Chunker {
                         Block::Script(script_buf) => {
                             //TODO: Can we avoid cloning or creating a builder here?
                             self.call_stack
-                                .push(Box::new(Builder::new().push_script(script_buf.clone())));
+                                .push(Box::new(StructuredScript::new().push_script(script_buf.clone())));
                         }
                     }
                 }
