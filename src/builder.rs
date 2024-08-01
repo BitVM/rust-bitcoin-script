@@ -1,5 +1,6 @@
 use bitcoin::blockdata::opcodes::Opcode;
-use bitcoin::blockdata::script::{PushBytes, PushBytesBuf, ScriptBuf};
+use bitcoin::blockdata::script::{PushBytes, PushBytesBuf, ScriptBuf, Instruction};
+use bitcoin::opcodes::all::{OP_ENDIF, OP_IF};
 use bitcoin::opcodes::{OP_0, OP_TRUE};
 use bitcoin::script::write_scriptint;
 use std::collections::HashMap;
@@ -27,6 +28,7 @@ pub struct StructuredScript {
     size: usize,
     // stack_hint will cache the result of stack analzyer
     stack_hint: Option<StackStatus>,
+    num_unclosed_ifs: i32,
     pub blocks: Vec<Block>,
     // TODO: It may be worth to lazy initialize the script_map
     pub script_map: HashMap<u64, StructuredScript>,
@@ -51,6 +53,7 @@ impl StructuredScript {
         StructuredScript {
             size: 0,
             stack_hint: None,
+            num_unclosed_ifs: 0,
             blocks,
             script_map: HashMap::new(),
         }
@@ -58,6 +61,10 @@ impl StructuredScript {
 
     pub fn len(&self) -> usize {
         self.size
+    }
+    
+    pub fn num_unclosed_ifs(&self) -> i32 {
+        self.num_unclosed_ifs
     }
 
     fn get_script_block(&mut self) -> &mut ScriptBuf {
@@ -81,6 +88,11 @@ impl StructuredScript {
 
     pub fn push_opcode(mut self, data: Opcode) -> StructuredScript {
         self.size += 1;
+        match data {
+            OP_IF => self.num_unclosed_ifs += 1,
+            OP_ENDIF => self.num_unclosed_ifs -= 1,
+            _ => (),
+        }
         let script = self.get_script_block();
         script.push_opcode(data);
         self
@@ -88,12 +100,21 @@ impl StructuredScript {
 
     pub fn push_script(mut self, data: ScriptBuf) -> StructuredScript {
         self.size += data.len();
+
+        for instruction in data.instructions() {
+            match instruction {
+                Ok(Instruction::Op(OP_IF)) => self.num_unclosed_ifs += 1,
+                Ok(Instruction::Op(OP_ENDIF)) => self.num_unclosed_ifs -= 1,
+                _ => (),
+            };
+        };
         self.blocks.push(Block::Script(data));
         self
     }
 
     pub fn push_env_script(mut self, data: StructuredScript) -> StructuredScript {
         self.size += data.size;
+        self.num_unclosed_ifs += data.num_unclosed_ifs;
         let id = calculate_hash(&data);
         self.blocks.push(Block::Call(id));
         // Register script
