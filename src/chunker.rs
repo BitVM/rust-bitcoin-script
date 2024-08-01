@@ -116,7 +116,7 @@ impl Chunker {
 
             assert!(
                 num_unclosed_ifs + builder.num_unclosed_ifs() >= 0,
-                "More OP_ENDIF's than OP_IF's in the script"
+                "More OP_ENDIF's than OP_IF's in the script. num_unclosed_if: {:?}, builder: {:?}", num_unclosed_ifs, builder.num_unclosed_ifs()
             );
 
             // TODO: Use stack analysis to find best possible chunk border
