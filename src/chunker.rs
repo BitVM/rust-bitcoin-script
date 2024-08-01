@@ -4,7 +4,6 @@ use crate::{
     StackAnalyzer,
 };
 
-
 #[derive(Debug, Clone)]
 struct ChunkStats {
     stack_input_size: usize,
@@ -29,7 +28,7 @@ impl Chunk {
         }
     }
 
-    pub fn scripts(self) -> Vec<Box<StructuredScript>>{
+    pub fn scripts(self) -> Vec<Box<StructuredScript>> {
         self.scripts
     }
 }
@@ -89,8 +88,8 @@ impl Chunker {
     }
 
     fn find_next_chunk(&mut self) -> Chunk {
-        let mut result = vec![];
-        let mut result_len = 0;
+        let mut chunk_scripts = vec![];
+        let mut chunk_len = 0;
         loop {
             let builder = match self.call_stack.pop() {
                 Some(builder) => *builder,
@@ -98,15 +97,26 @@ impl Chunker {
             };
 
             // TODO: Use stack analysis to find best possible chunk border
-            // TODO: Consider chunks that are closest to the tolerance first (e.g. if target = 300
-            // and tolerance = 20 we can split at 299 and 290 but 299 should be preferred.
             let block_len = builder.len();
-            if result_len + block_len < self.target_chunk_size - self.tolerance {
-                result.push(Box::new(builder));
-                result_len += block_len;
-            } else if result_len + block_len > self.target_chunk_size {
-                // Chunk inside a call of the current builder
-                // Add all its calls to the call_stack
+            if chunk_len + block_len < self.target_chunk_size - self.tolerance {
+                // Case 1: Builder is too small. target - tolerance not yet reached with it.
+                chunk_scripts.push(Box::new(builder));
+                chunk_len += block_len;
+            } else if chunk_len + block_len < self.target_chunk_size {
+                // Case 2: Adding the current builder remains a valid solution.
+                // TODO: Check with stack analyzer to see if adding the builder is better or not.
+                // (If we add it we have to add all intermediary builders that were previously not
+                // added - keep another call_stack equivalent for that)
+                chunk_scripts.push(Box::new(builder));
+                chunk_len += block_len;
+            } else if chunk_len + block_len > self.target_chunk_size
+                && chunk_len < self.target_chunk_size - self.tolerance
+            {
+                // Case 3: Current builder too large and there is no acceptable solution yet
+                // TODO: Could add a depth parameter here to even if we have an acceptable solution
+                // check if there is a better one in next depth calls
+                // Chunk inside a call of the current builder.
+                // Add all its calls to the call_stack.
                 let mut contains_call = false;
                 for block in builder.blocks.iter().rev() {
                     match block {
@@ -119,19 +129,19 @@ impl Chunker {
                         }
                         Block::Script(script_buf) => {
                             //TODO: Can we avoid cloning or creating a builder here?
-                            self.call_stack
-                                .push(Box::new(StructuredScript::new().push_script(script_buf.clone())));
+                            self.call_stack.push(Box::new(
+                                StructuredScript::new().push_script(script_buf.clone()),
+                            ));
                         }
                     }
                 }
-                assert!(contains_call, "Not able to chunk up scriptBufs");
+                assert!(contains_call, "No support for chunking up scriptBufs");
             } else {
-                result.push(Box::new(builder));
-                result_len += block_len;
+                self.call_stack.push(Box::new(builder));
                 break;
             }
         }
-        Chunk::new(result, result_len)
+        Chunk::new(chunk_scripts, chunk_len)
     }
 
     pub fn find_chunks(&mut self) -> Vec<usize> {
