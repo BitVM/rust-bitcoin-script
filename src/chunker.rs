@@ -129,10 +129,11 @@ impl Chunker {
             } else if chunk_len + block_len <= self.target_chunk_size {
                 // Case 2: Adding the current builder remains a valid solution.
                 // TODO: Check with stack analyzer to see if adding the builder is better or not.
-                // (If we add it we have to add all intermediary builders that were previously not
-                // added - keep another call_stack equivalent for that)
+                let script_unclosed_ifs = builder.num_unclosed_ifs();
                 if num_unclosed_ifs + builder.num_unclosed_ifs() == 0 {
                     // We are going to keep this structured script in the chunk
+                    chunk_scripts.extend(call_stack_undo);
+                    chunk_scripts.push(Box::new(builder));
                     // Reset the undo information
                     call_stack_undo = vec![];
                     chunk_len_undo = 0;
@@ -140,12 +141,11 @@ impl Chunker {
                 } else {
                     // Update the undo information in case we need to remove this StructuredScript
                     // from the chunk again
-                    call_stack_undo.push(Box::new(builder.clone()));
+                    call_stack_undo.push(Box::new(builder));
                     chunk_len_undo += block_len;
-                    num_unclosed_ifs_undo += builder.num_unclosed_ifs();
+                    num_unclosed_ifs_undo += script_unclosed_ifs;
                 }
-                num_unclosed_ifs += builder.num_unclosed_ifs();
-                chunk_scripts.push(Box::new(builder));
+                num_unclosed_ifs += script_unclosed_ifs;
                 chunk_len += block_len;
             } else if chunk_len + block_len > self.target_chunk_size
                 && chunk_len < self.target_chunk_size - self.tolerance
