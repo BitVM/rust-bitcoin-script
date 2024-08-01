@@ -1,6 +1,6 @@
 use bitcoin::blockdata::opcodes::Opcode;
 use bitcoin::blockdata::script::{PushBytes, PushBytesBuf, ScriptBuf, Instruction};
-use bitcoin::opcodes::all::{OP_ENDIF, OP_IF};
+use bitcoin::opcodes::all::{OP_ENDIF, OP_IF, OP_NOTIF};
 use bitcoin::opcodes::{OP_0, OP_TRUE};
 use bitcoin::script::write_scriptint;
 use std::collections::HashMap;
@@ -90,6 +90,7 @@ impl StructuredScript {
         self.size += 1;
         match data {
             OP_IF => self.num_unclosed_ifs += 1,
+            OP_NOTIF => self.num_unclosed_ifs += 1,
             OP_ENDIF => self.num_unclosed_ifs -= 1,
             _ => (),
         }
@@ -104,6 +105,7 @@ impl StructuredScript {
         for instruction in data.instructions() {
             match instruction {
                 Ok(Instruction::Op(OP_IF)) => self.num_unclosed_ifs += 1,
+                Ok(Instruction::Op(OP_NOTIF)) => self.num_unclosed_ifs += 1,
                 Ok(Instruction::Op(OP_ENDIF)) => self.num_unclosed_ifs -= 1,
                 _ => (),
             };
@@ -113,7 +115,7 @@ impl StructuredScript {
     }
 
     pub fn push_env_script(mut self, data: StructuredScript) -> StructuredScript {
-        self.size += data.size;
+        self.size += data.len();
         self.num_unclosed_ifs += data.num_unclosed_ifs;
         let id = calculate_hash(&data);
         self.blocks.push(Block::Call(id));
