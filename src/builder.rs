@@ -107,7 +107,7 @@ impl StructuredScript {
         self.extra_endif_positions.clone()
     }
     
-    pub fn max_op_if_interval(self) -> (usize, usize) {
+    pub fn max_op_if_interval(&self) -> (usize, usize) {
         self.max_if_interval
     }
 
