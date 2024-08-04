@@ -162,7 +162,7 @@ impl StructuredScript {
             };
             match instruction {
                 Ok(Instruction::Op(_)) => pos += 1,
-                Ok(Instruction::PushBytes(pushbytes)) => pos += pushbytes.len(),
+                Ok(Instruction::PushBytes(pushbytes)) => pos += pushbytes.len() + 1,
                 _ => (),
             };
         }
