@@ -1,4 +1,4 @@
-use bitcoin::opcodes::all::OP_ADD;
+use bitcoin::opcodes::all::{OP_ADD, OP_ENDIF};
 use bitcoin_script::{script, Script};
 
 #[test]
@@ -283,24 +283,31 @@ fn test_if_positions() {
         OP_ENDIF
     };
 
+    let close_script = script! {
+        OP_ENDIF
+        OP_ENDIF
+        OP_ENDIF
+    };
+
     let script = script!{
         OP_IF
             OP_ADD
         OP_ELSE
             { sub_script.clone() }
-        OP_ENDIF
-        OP_ENDIF
-        OP_ENDIF
+        {close_script.clone() }
     };
     
     assert_eq!(sub_script.num_unclosed_ifs(), 2);
     assert_eq!(script.num_unclosed_ifs(), 0);
     
-    assert_eq!(sub_script.if_positions(), vec![0,1,2]);
-    assert_eq!(sub_script.endif_positions(), vec![3]);
+    assert_eq!(sub_script.unclosed_if_positions(), vec![0,1]);
+    assert_eq!(sub_script.extra_endif_positions(), vec![]);
 
-    assert_eq!(script.if_positions(), vec![0, 3, 4, 5]);
-    assert_eq!(script.endif_positions(), vec![6, 7, 8, 9]);
+    assert_eq!(close_script.unclosed_if_positions(), vec![]);
+    assert_eq!(close_script.extra_endif_positions(), vec![0, 1, 2]);
+
+    assert_eq!(script.unclosed_if_positions(), vec![]);
+    assert_eq!(script.extra_endif_positions(), vec![]);
 }
 
 #[test]
@@ -322,5 +329,5 @@ fn test_if_max_interval() {
         OP_ENDIF
     };
 
-    assert_eq!(script.max_if_interval(), (0,9));
+    assert_eq!(script.max_op_if_interval(), (0,9));
 }
