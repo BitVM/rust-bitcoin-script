@@ -82,7 +82,11 @@ impl StructuredScript {
     pub fn max_if_interval(&self) -> (usize, usize) {
         let mut max_interval = (0, 0);
         let mut if_ends = self.endif_positions();
+        println!("");
+        let mut i = 0;
         for if_start in self.if_positions.iter().rev() {
+            print!("\rCurrent if: {}/{}", i, self.if_positions.len());
+            i += 1;
             // Find the corresponding if_end
             let mut matching_if_end = 0;
             for if_end in &if_ends {
