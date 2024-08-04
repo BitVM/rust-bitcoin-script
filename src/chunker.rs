@@ -114,8 +114,8 @@ impl Chunker {
                 None => break, // the last block in the call stack
             };
 
-            println!("[INFO] current chunk_len: {} -- current num_unclosed_ifs: {}", chunk_len, num_unclosed_ifs);
-            println!("[INFO] Popping builder with size {} and num_unclosed_ifs {} from call_stack", builder.len(), builder.num_unclosed_ifs());
+            //println!("[INFO] current chunk_len: {} -- current num_unclosed_ifs: {}", chunk_len, num_unclosed_ifs);
+            //println!("[INFO] Popping builder with size {} and num_unclosed_ifs {} from call_stack", builder.len(), builder.num_unclosed_ifs());
 
             assert!(
                 num_unclosed_ifs + builder.num_unclosed_ifs() >= 0,
@@ -153,7 +153,7 @@ impl Chunker {
             } else if chunk_len + block_len > self.target_chunk_size
                 && (chunk_len < self.target_chunk_size - self.tolerance || chunk_len == 0)
             {
-                println!("[INFO] Chunking a call now.");
+                //println!("[INFO] Chunking a call now.");
                 // Case 3: Current builder too large and there is no acceptable solution yet
                 // TODO: Could add a depth parameter here to even if we have an acceptable solution
                 // check if there is a better one in next depth calls
