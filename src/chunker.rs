@@ -151,7 +151,7 @@ impl Chunker {
                 num_unclosed_ifs += script_unclosed_ifs;
                 chunk_len += block_len;
             } else if chunk_len + block_len > self.target_chunk_size
-                && chunk_len < self.target_chunk_size - self.tolerance
+                && (chunk_len < self.target_chunk_size - self.tolerance || chunk_len == 0)
             {
                 println!("[INFO] Chunking a call now.");
                 // Case 3: Current builder too large and there is no acceptable solution yet

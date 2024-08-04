@@ -1,5 +1,5 @@
 use bitcoin::blockdata::opcodes::Opcode;
-use bitcoin::blockdata::script::{PushBytes, PushBytesBuf, ScriptBuf, Instruction};
+use bitcoin::blockdata::script::{Instruction, PushBytes, PushBytesBuf, ScriptBuf};
 use bitcoin::opcodes::all::{OP_ENDIF, OP_IF, OP_NOTIF};
 use bitcoin::opcodes::{OP_0, OP_TRUE};
 use bitcoin::script::write_scriptint;
@@ -29,6 +29,8 @@ pub struct StructuredScript {
     // stack_hint will cache the result of stack analzyer
     stack_hint: Option<StackStatus>,
     num_unclosed_ifs: i32,
+    if_positions: Vec<usize>,
+    endif_positions: Vec<usize>,
     pub blocks: Vec<Block>,
     // TODO: It may be worth to lazy initialize the script_map
     pub script_map: HashMap<u64, StructuredScript>,
@@ -54,6 +56,8 @@ impl StructuredScript {
             size: 0,
             stack_hint: None,
             num_unclosed_ifs: 0,
+            if_positions: vec![],
+            endif_positions: vec![],
             blocks,
             script_map: HashMap::new(),
         }
@@ -62,9 +66,38 @@ impl StructuredScript {
     pub fn len(&self) -> usize {
         self.size
     }
-    
+
     pub fn num_unclosed_ifs(&self) -> i32 {
         self.num_unclosed_ifs
+    }
+    
+    pub fn if_positions(&self) -> Vec<usize> {
+        self.if_positions.clone()
+    }
+
+    pub fn endif_positions(&self) -> Vec<usize> {
+        self.endif_positions.clone()
+    }
+
+    pub fn max_if_interval(&self) -> (usize, usize) {
+        let mut max_interval = (0, 0);
+        let mut if_ends = self.endif_positions();
+        for if_start in self.if_positions.iter().rev() {
+            // Find the corresponding if_end
+            let mut matching_if_end = 0;
+            for if_end in &if_ends {
+                if *if_end > *if_start {
+                    matching_if_end = *if_end;
+                    break;
+                }
+            }
+            assert_ne!(matching_if_end, 0, "Did not find a matching OP_ENDIF for the OP_IF equivalent at position {}", if_start);
+            if_ends.retain(|x| *x != matching_if_end);
+            if max_interval.1 - max_interval.0 < matching_if_end - *if_start {
+                max_interval = (*if_start, matching_if_end);
+            }
+        }
+        max_interval
     }
 
     fn get_script_block(&mut self) -> &mut ScriptBuf {
@@ -87,34 +120,62 @@ impl StructuredScript {
     }
 
     pub fn push_opcode(mut self, data: Opcode) -> StructuredScript {
-        self.size += 1;
         match data {
-            OP_IF => self.num_unclosed_ifs += 1,
-            OP_NOTIF => self.num_unclosed_ifs += 1,
-            OP_ENDIF => self.num_unclosed_ifs -= 1,
+            OP_IF => {
+                self.num_unclosed_ifs += 1;
+                self.if_positions.push(self.size);
+            }
+            OP_NOTIF => {
+                self.num_unclosed_ifs += 1;
+                self.if_positions.push(self.size);
+            }
+            OP_ENDIF => {
+                self.num_unclosed_ifs -= 1;
+                self.endif_positions.push(self.size);
+            }
             _ => (),
         }
+        self.size += 1;
         let script = self.get_script_block();
         script.push_opcode(data);
         self
     }
 
     pub fn push_script(mut self, data: ScriptBuf) -> StructuredScript {
-        self.size += data.len();
-
+        let mut pos = 0;
         for instruction in data.instructions() {
             match instruction {
-                Ok(Instruction::Op(OP_IF)) => self.num_unclosed_ifs += 1,
-                Ok(Instruction::Op(OP_NOTIF)) => self.num_unclosed_ifs += 1,
-                Ok(Instruction::Op(OP_ENDIF)) => self.num_unclosed_ifs -= 1,
+                Ok(Instruction::Op(OP_IF)) => {
+                    self.num_unclosed_ifs += 1;
+                    self.if_positions.push(self.size + pos);
+                }
+                Ok(Instruction::Op(OP_NOTIF)) => {
+                    self.num_unclosed_ifs += 1;
+                    self.if_positions.push(self.size + pos);
+                }
+                Ok(Instruction::Op(OP_ENDIF)) => {
+                    self.num_unclosed_ifs -= 1;
+                    self.endif_positions.push(self.size + pos);
+                }
                 _ => (),
             };
-        };
+            match instruction {
+                Ok(Instruction::Op(_)) => pos += 1,
+                Ok(Instruction::PushBytes(pushbytes)) => pos += pushbytes.len(),
+                _ => (),
+            };
+        }
+        assert_eq!(data.len(), pos, "Pos counting seems to be off");
+        self.size += data.len();
         self.blocks.push(Block::Script(data));
         self
     }
 
     pub fn push_env_script(mut self, data: StructuredScript) -> StructuredScript {
+        self.if_positions
+            .extend(data.if_positions.iter().map(|x| x + self.size));
+        self.endif_positions
+            .extend(data.endif_positions.iter().map(|x| x + self.size));
         self.size += data.len();
         self.num_unclosed_ifs += data.num_unclosed_ifs;
         let id = calculate_hash(&data);
