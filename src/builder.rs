@@ -181,7 +181,7 @@ impl StructuredScript {
             let if_end = endif_positions_iter.next().unwrap_or_else(|| unreachable!());
             self.update_max_interval(if_start, *if_end + self.size);
         }
-        
+        self.update_max_interval(data.max_if_interval.0, data.max_if_interval.1);
         self.unclosed_if_positions
             .extend(data.unclosed_if_positions.iter().map(|x| x + self.size));
         self.extra_endif_positions
