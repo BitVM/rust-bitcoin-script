@@ -114,6 +114,9 @@ impl Chunker {
                 None => break, // the last block in the call stack
             };
 
+            println!("[INFO] current chunk_len: {} -- current num_unclosed_ifs: {}", chunk_len, num_unclosed_ifs);
+            println!("[INFO] Popping builder with size {} and num_unclosed_ifs {} from call_stack", builder.len(), builder.num_unclosed_ifs());
+
             assert!(
                 num_unclosed_ifs + builder.num_unclosed_ifs() >= 0,
                 "More OP_ENDIF's than OP_IF's in the script. num_unclosed_if: {:?}, builder: {:?}", num_unclosed_ifs, builder.num_unclosed_ifs()
@@ -150,6 +153,7 @@ impl Chunker {
             } else if chunk_len + block_len > self.target_chunk_size
                 && chunk_len < self.target_chunk_size - self.tolerance
             {
+                println!("[INFO] Chunking a call now.");
                 // Case 3: Current builder too large and there is no acceptable solution yet
                 // TODO: Could add a depth parameter here to even if we have an acceptable solution
                 // check if there is a better one in next depth calls
@@ -173,7 +177,7 @@ impl Chunker {
                         }
                     }
                 }
-                assert!(contains_call, "No support for chunking up scriptBufs");
+                assert!(contains_call, "No support for chunking up ScriptBufs");
             } else {
                 call_stack_undo.push(Box::new(builder));
                 break;
@@ -182,6 +186,7 @@ impl Chunker {
 
         // Undo the lately added scripts if we are not closing all ifs with them.
         if num_unclosed_ifs != 0 {
+            println!("[INFO] Unable to close all ifs. Undoing the added scripts to the point where num_unclosed_ifs was 0.");
             num_unclosed_ifs -= num_unclosed_ifs_undo;
             chunk_len -= chunk_len_undo;
         }
