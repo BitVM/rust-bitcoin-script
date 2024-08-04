@@ -274,3 +274,53 @@ fn test_num_ifs() {
     assert_eq!(script.num_unclosed_ifs(), 0);
 }
 
+#[test]
+fn test_if_positions() {
+    let sub_script = script! {
+        OP_IF
+            OP_IF
+                OP_IF
+        OP_ENDIF
+    };
+
+    let script = script!{
+        OP_IF
+            OP_ADD
+        OP_ELSE
+            { sub_script.clone() }
+        OP_ENDIF
+        OP_ENDIF
+        OP_ENDIF
+    };
+    
+    assert_eq!(sub_script.num_unclosed_ifs(), 2);
+    assert_eq!(script.num_unclosed_ifs(), 0);
+    
+    assert_eq!(sub_script.if_positions(), vec![0,1,2]);
+    assert_eq!(sub_script.endif_positions(), vec![3]);
+
+    assert_eq!(script.if_positions(), vec![0, 3, 4, 5]);
+    assert_eq!(script.endif_positions(), vec![6, 7, 8, 9]);
+}
+
+#[test]
+fn test_if_max_interval() {
+    let sub_script = script! {
+        OP_IF
+            OP_IF
+                OP_IF
+        OP_ENDIF
+    };
+
+    let script = script!{
+        OP_IF
+            OP_ADD
+        OP_ELSE
+            { sub_script.clone() }
+        OP_ENDIF
+        OP_ENDIF
+        OP_ENDIF
+    };
+
+    assert_eq!(script.max_if_interval(), (0,9));
+}
