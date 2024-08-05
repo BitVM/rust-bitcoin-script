@@ -203,7 +203,6 @@ impl StructuredScript {
     }
 
     pub fn push_env_script(mut self, mut data: StructuredScript) -> StructuredScript {
-        println!("Pushing env script --  self: {} data: {}", self.debug_identifier, data.debug_identifier);
         data.debug_identifier = format!("{} {}", self.debug_identifier, data.debug_identifier);
         // Try closing ifs
         let num_closable_ifs = min(self.unclosed_if_positions.len(), data.extra_endif_positions.len());
