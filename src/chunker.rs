@@ -108,7 +108,7 @@ impl Chunker {
         let mut chunk_len_undo = 0;
         let mut num_unclosed_ifs_undo = 0;
         
-        let max_depth = 3;
+        let max_depth = 8;
         let mut depth = 0;
 
         loop {
