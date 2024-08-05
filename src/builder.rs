@@ -183,8 +183,8 @@ impl StructuredScript {
                     self.num_unclosed_ifs -= 1;
                     let closed_if = self.unclosed_if_positions.pop();
                     match closed_if {
-                        Some(pos) => self.update_max_interval(pos, self.size),
-                        None => self.extra_endif_positions.push(self.size),
+                        Some(closed_if_pos) => self.update_max_interval(closed_if_pos, self.size + pos),
+                        None => self.extra_endif_positions.push(self.size + pos),
                     }
                 }
 
