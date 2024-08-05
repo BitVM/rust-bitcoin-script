@@ -107,6 +107,9 @@ impl Chunker {
         let mut call_stack_undo = vec![];
         let mut chunk_len_undo = 0;
         let mut num_unclosed_ifs_undo = 0;
+        
+        let max_depth = 3;
+        let mut depth = 0;
 
         loop {
             let builder = match self.call_stack.pop() {
@@ -148,10 +151,11 @@ impl Chunker {
                     chunk_len_undo += block_len;
                     num_unclosed_ifs_undo += script_unclosed_ifs;
                 }
+                depth = 0;
                 num_unclosed_ifs += script_unclosed_ifs;
                 chunk_len += block_len;
             } else if chunk_len + block_len > self.target_chunk_size
-                && (chunk_len < self.target_chunk_size - self.tolerance || chunk_len == 0)
+                && (chunk_len < self.target_chunk_size - self.tolerance || chunk_len == 0 || depth <= max_depth)
             {
                 //println!("[INFO] Chunking a call now.");
                 // Case 3: Current builder too large and there is no acceptable solution yet
@@ -177,7 +181,8 @@ impl Chunker {
                         }
                     }
                 }
-                assert!(contains_call, "No support for chunking up ScriptBufs");
+                assert!(contains_call || depth <= max_depth, "No support for chunking up ScriptBufs, depth: {}", depth);
+                depth += 1;
             } else {
                 call_stack_undo.push(Box::new(builder));
                 break;
@@ -185,6 +190,7 @@ impl Chunker {
         }
 
         // Undo the lately added scripts if we are not closing all ifs with them.
+        // TODO: This is an issue because we may remove way more than necessary.
         if num_unclosed_ifs != 0 {
             println!("[INFO] Unable to close all ifs. Undoing the added scripts to the point where num_unclosed_ifs was 0.");
             num_unclosed_ifs -= num_unclosed_ifs_undo;
