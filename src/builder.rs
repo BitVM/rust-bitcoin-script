@@ -29,6 +29,7 @@ pub struct StructuredScript {
     size: usize,
     // stack_hint will cache the result of stack analzyer
     stack_hint: Option<StackStatus>,
+    pub debug_identifier: String,
     num_unclosed_ifs: i32,
     unclosed_if_positions: Vec<usize>,
     extra_endif_positions: Vec<usize>,
@@ -52,11 +53,12 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 }
 
 impl StructuredScript {
-    pub fn new() -> Self {
+    pub fn new(debug_info: &str) -> Self {
         let blocks = Vec::new();
         StructuredScript {
             size: 0,
             stack_hint: None,
+            debug_identifier: debug_info.to_string(),
             num_unclosed_ifs: 0,
             unclosed_if_positions: vec![],
             extra_endif_positions: vec![],
@@ -72,6 +74,34 @@ impl StructuredScript {
 
     pub fn num_unclosed_ifs(&self) -> i32 {
         self.num_unclosed_ifs
+    }
+
+    // Return the debug information of the Opcode at position
+    pub fn debug_info(&self, position: usize) -> String {
+        let mut current_pos = 0;
+        for block in &self.blocks {
+            assert!(current_pos <= position, "Target position not found");
+            match block {
+                Block::Call(id) => {
+                    let called_script = self
+                        .script_map
+                        .get(id)
+                        .expect("Missing entry for a called script");
+                    if position >= current_pos && position < current_pos + called_script.len() {
+                        return called_script.debug_info(position - current_pos);
+                    }
+                    current_pos += called_script.len();
+                    }
+                Block::Script(script_buf) => {
+                    if position >= current_pos && position < current_pos + script_buf.len() {
+                        return self.debug_identifier.clone()
+                    }
+                    current_pos += script_buf.len();
+                }
+            }
+
+        }
+        panic!("No blocks in the structured script");
     }
 
     fn get_script_block(&mut self) -> &mut ScriptBuf {
@@ -172,7 +202,9 @@ impl StructuredScript {
         self
     }
 
-    pub fn push_env_script(mut self, data: StructuredScript) -> StructuredScript {
+    pub fn push_env_script(mut self, mut data: StructuredScript) -> StructuredScript {
+        println!("Pushing env script --  self: {} data: {}", self.debug_identifier, data.debug_identifier);
+        data.debug_identifier = format!("{} {}", self.debug_identifier, data.debug_identifier);
         // Try closing ifs
         let num_closable_ifs = min(self.unclosed_if_positions.len(), data.extra_endif_positions.len());
         let mut endif_positions_iter = data.extra_endif_positions.iter().rev();

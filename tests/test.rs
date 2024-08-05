@@ -260,7 +260,7 @@ fn test_num_ifs() {
         OP_ENDIF
     };
 
-    let script = script!{
+    let script = script! {
         OP_IF
             OP_ADD
         OP_ELSE
@@ -269,7 +269,7 @@ fn test_num_ifs() {
         OP_ENDIF
         OP_ENDIF
     };
-    
+
     assert_eq!(sub_script.num_unclosed_ifs(), 2);
     assert_eq!(script.num_unclosed_ifs(), 0);
 }
@@ -289,18 +289,18 @@ fn test_if_positions() {
         OP_ENDIF
     };
 
-    let script = script!{
+    let script = script! {
         OP_IF
             OP_ADD
         OP_ELSE
             { sub_script.clone() }
         {close_script.clone() }
     };
-    
+
     assert_eq!(sub_script.num_unclosed_ifs(), 2);
     assert_eq!(script.num_unclosed_ifs(), 0);
-    
-    assert_eq!(sub_script.unclosed_if_positions(), vec![0,1]);
+
+    assert_eq!(sub_script.unclosed_if_positions(), vec![0, 1]);
     assert_eq!(sub_script.extra_endif_positions(), vec![]);
 
     assert_eq!(close_script.unclosed_if_positions(), vec![]);
@@ -310,24 +310,36 @@ fn test_if_positions() {
     assert_eq!(script.extra_endif_positions(), vec![]);
 }
 
-#[test]
-fn test_if_max_interval() {
-    let sub_script = script! {
+pub fn if_sub_script() -> Script {
+    script! {
         OP_IF
             OP_IF
                 OP_IF
         OP_ENDIF
-    };
+    }
+}
 
-    let script = script!{
+pub fn start_op_if() -> Script {
+    script! {
         OP_IF
+    }
+}
+
+#[test]
+fn test_if_max_interval() {
+    let script = script! {
+        start_op_if
             OP_ADD
         OP_ELSE
-            { sub_script.clone() }
+        if_sub_script
         OP_ENDIF
         OP_ENDIF
         OP_ENDIF
     };
-
-    assert_eq!(script.max_op_if_interval(), (0,9));
+    let if_interval = script.max_op_if_interval();
+    println!(
+        "Max interval debug info: {}, {}",
+        script.debug_info(if_interval.0), script.debug_info(if_interval.1)
+    );
+    assert_eq!(if_interval, (0, 9));
 }

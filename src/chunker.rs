@@ -172,7 +172,7 @@ impl Chunker {
                         Block::Script(script_buf) => {
                             //TODO: Can we avoid cloning or creating a builder here?
                             self.call_stack.push(Box::new(
-                                StructuredScript::new().push_script(script_buf.clone()),
+                                StructuredScript::new("").push_script(script_buf.clone()),
                             ));
                         }
                     }

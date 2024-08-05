@@ -40,3 +40,5 @@ repository = "https://github.com/BitVM/rust-bitcoin-script"
 [dependencies]
 bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", branch = "bitvm", features = ["rand-std"]}
 script-macro = { path = "./macro" }
+stdext = "0.3.3"
+
