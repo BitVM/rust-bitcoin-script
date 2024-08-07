@@ -72,6 +72,14 @@ impl StructuredScript {
         self.size
     }
 
+    pub fn contains_flow_op(&self) -> bool {
+        !(self.unclosed_if_positions.is_empty() && self.extra_endif_positions().is_empty() && self.max_if_interval == (0,0))
+    }
+
+    pub fn is_script_buf(&self) -> bool {
+        self.blocks.len() == 1 && matches!(self.blocks[0], Block::Script(_))
+    }
+
     pub fn num_unclosed_ifs(&self) -> i32 {
         self.num_unclosed_ifs
     }
