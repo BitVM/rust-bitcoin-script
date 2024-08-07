@@ -238,7 +238,7 @@ impl Chunker {
                 // TODO: Check with stack analyzer to see if adding the builder is better or not.
                 num_unclosed_ifs += builder.num_unclosed_ifs();
                 chunk_len += block_len;
-                if num_unclosed_ifs + builder.num_unclosed_ifs() == 0 {
+                if num_unclosed_ifs == 0 {
                     // We are going to keep this structured script in the chunk
                     // Reset the undo information
                     chunk_scripts.extend(undo_info.reset());
