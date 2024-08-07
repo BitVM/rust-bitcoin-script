@@ -145,7 +145,7 @@ impl Chunker {
             if builder.contains_flow_op() {
                 if builder.is_script_buf() && builder.len() == 1 {
                     num_unclosed_ifs -= builder.num_unclosed_ifs();
-                    println!("[INFO] Removing {:?}", builder.blocks);
+                    println!("[INFO] Removing {:?}", builder);
                     removed_len += builder.len();
                     removed_scripts.push(builder);
                     if num_unclosed_ifs == 0 {
@@ -195,7 +195,7 @@ impl Chunker {
 
         self.call_stack.extend(removed_scripts.into_iter().rev());
         assert!(num_unclosed_ifs >= 0, "More OP_ENDIF's than OP_IF's after undo step. (This means there is a bug in the undo logic.)");
-        assert_eq!(num_unclosed_ifs, 0, "Unable to make up for the OP_IF's in this chunk. Consider a larger target size or more tolerance. Unclosed OP_IF's: {:?}, removed_len: {}, undo.call_stack: {:?}", num_unclosed_ifs, removed_len, undo_info.call_stack);
+        assert_eq!(num_unclosed_ifs, 0, "Unable to make up for the OP_IF's in this chunk. Consider a larger target size or more tolerance. Unclosed OP_IF's: {:?}, removed_len: {}, undo.call_stack: {:?}, chunks: {:?}", num_unclosed_ifs, removed_len, undo_info.call_stack, self.chunks);
         (undo_info.call_stack, removed_len)
     }
 
