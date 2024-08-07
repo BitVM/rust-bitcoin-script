@@ -21,9 +21,31 @@ fn test_chunker_simple() {
 
     assert_eq!(chunk_borders, vec![2, 2, 2, 2]);
 }
+#[test]
+fn test_chunker_ifs_1() {
+    let sub_script = script! {
+        OP_ADD
+        OP_ADD
+    };
+
+    let script = script! {
+        { sub_script.clone() }
+        OP_IF
+        { sub_script.clone() }
+        OP_ENDIF
+    };
+
+    println!("{:?}", sub_script);
+
+    let mut chunker = Chunker::new(script, 5, 4);
+    let chunk_borders = chunker.find_chunks();
+    println!("Chunker: {:?}", chunker);
+
+    assert_eq!(chunk_borders, vec![2, 4]);
+}
 
 #[test]
-fn test_chunker_ifs() {
+fn test_chunker_ifs_2() {
     let sub_script = script! {
         OP_ADD
         OP_ADD
