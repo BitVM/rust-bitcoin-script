@@ -133,7 +133,6 @@ impl Chunker {
         }
 
         println!("[INFO] Unable to close all ifs. Undoing the added scripts to a point where num_unclosed_ifs is 0.");
-        println!("[INFO] UNDO CALL STACK: {:?}", undo_info.call_stack);
         let mut removed_scripts = vec![];
         let mut removed_len = 0;
 
@@ -145,7 +144,6 @@ impl Chunker {
             if builder.contains_flow_op() {
                 if builder.is_script_buf() && builder.len() == 1 {
                     num_unclosed_ifs -= builder.num_unclosed_ifs();
-                    println!("[INFO] Removing {:?}", builder);
                     removed_len += builder.len();
                     removed_scripts.push(builder);
                     if num_unclosed_ifs == 0 {
@@ -184,10 +182,6 @@ impl Chunker {
                 }
             } else {
                 // No OP_IF, OP_NOTIF or OP_ENDIF in that structured script so just remove it
-                println!(
-                    "[INFO] Removing because it contains no flow control {:?}",
-                    builder
-                );
                 removed_len += builder.len();
                 removed_scripts.push(builder);
             }
