@@ -193,7 +193,7 @@ impl Chunker {
             }
         }
 
-        self.call_stack.extend(removed_scripts.into_iter().rev());
+        self.call_stack.extend(removed_scripts);
         assert!(num_unclosed_ifs >= 0, "More OP_ENDIF's than OP_IF's after undo step. (This means there is a bug in the undo logic.)");
         assert_eq!(num_unclosed_ifs, 0, "Unable to make up for the OP_IF's in this chunk. Consider a larger target size or more tolerance. Unclosed OP_IF's: {:?}, removed_len: {}, undo.call_stack: {:?}, chunks: {:?}", num_unclosed_ifs, removed_len, undo_info.call_stack, self.chunks.iter().map(|chunk| chunk.size).collect::<Vec<_>>());
         (undo_info.call_stack, removed_len)
