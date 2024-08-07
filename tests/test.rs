@@ -310,6 +310,39 @@ fn test_if_positions() {
     assert_eq!(script.extra_endif_positions(), vec![]);
 }
 
+#[test]
+fn test_if_positions_opif() {
+    let script = script! {
+        OP_IF
+    };
+
+    assert_eq!(script.num_unclosed_ifs(), 1);
+    assert_eq!(script.unclosed_if_positions(), vec![0]);
+    assert_eq!(script.extra_endif_positions(), vec![]);
+}
+
+#[test]
+fn test_if_positions_opnotif() {
+    let script = script! {
+        OP_NOTIF
+    };
+
+    assert_eq!(script.num_unclosed_ifs(), 1);
+    assert_eq!(script.unclosed_if_positions(), vec![0]);
+    assert_eq!(script.extra_endif_positions(), vec![]);
+}
+
+#[test]
+fn test_if_positions_opendif() {
+    let script = script! {
+        OP_ENDIF
+    };
+
+    assert_eq!(script.num_unclosed_ifs(), -1);
+    assert_eq!(script.unclosed_if_positions(), vec![]);
+    assert_eq!(script.extra_endif_positions(), vec![0]);
+}
+
 pub fn if_sub_script() -> Script {
     script! {
         OP_IF
