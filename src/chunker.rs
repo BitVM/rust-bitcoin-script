@@ -143,7 +143,7 @@ impl Chunker {
                 None => break, // the last block in the call stack
             };
             if builder.contains_flow_op() {
-                if builder.is_script_buf() {
+                if builder.is_script_buf() && builder.len() == 1 {
                     num_unclosed_ifs -= builder.num_unclosed_ifs();
                     println!("[INFO] Removing {:?}", builder.blocks);
                     removed_len += builder.len();
