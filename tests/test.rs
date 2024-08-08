@@ -376,3 +376,22 @@ fn test_if_max_interval() {
     );
     assert_eq!(if_interval, (0, 9));
 }
+
+#[test]
+fn test_is_script_buf() {
+    let script = script! {
+        OP_IF
+        OP_ENDIF
+    };
+    assert_eq!(script.is_script_buf(), true);
+    assert_eq!(script.contains_flow_op(), true);
+}
+
+#[test]
+fn test_is_script_buf_false() {
+    let script = script! {
+        { script! {OP_ADD} }
+    };
+    assert_eq!(script.is_script_buf(), false);
+    assert_eq!(script.contains_flow_op(), false);
+}
