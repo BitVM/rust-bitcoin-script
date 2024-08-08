@@ -1,6 +1,10 @@
 use core::panic;
 
-use bitcoin::{opcodes::all::{OP_ENDIF, OP_IF, OP_NOTIF}, script::Instruction, ScriptBuf};
+use bitcoin::{
+    opcodes::all::{OP_ENDIF, OP_IF, OP_NOTIF},
+    script::Instruction,
+    ScriptBuf,
+};
 
 use crate::{
     analyzer::StackStatus,
@@ -99,9 +103,7 @@ impl Chunker {
             chunks.push(chunk);
         }
         for chunk in chunks.iter_mut() {
-            // println!("chunk size: {}", chunk_size);
             let status = self.stack_analyze(&mut chunk.scripts);
-            // println!("stack_analyze: {:?}", status);
             // ((-1 * access) as u32, (depth - access) as u32)
             let stack_input_size = status.deepest_stack_accessed.abs() as usize;
             let stack_output_size = (status.stack_changed - status.deepest_stack_accessed) as usize;
@@ -132,14 +134,13 @@ impl Chunker {
             return (vec![], 0);
         }
 
-        println!("[INFO] Unable to close all ifs. Undoing the added scripts to a point where num_unclosed_ifs is 0.");
         let mut removed_scripts = vec![];
         let mut removed_len = 0;
 
         loop {
             let builder = match undo_info.call_stack.pop() {
                 Some(builder) => builder,
-                None => break, // the last block in the call stack
+                None => panic!("num_unclosed_ifs != 0 but the undo_info call_stack is empty"), // the last block in the call stack
             };
             if builder.contains_flow_op() {
                 if builder.is_script_buf() && builder.len() == 1 {
@@ -150,7 +151,7 @@ impl Chunker {
                         break;
                     }
                 } else {
-                    for block in builder.blocks.iter().rev() {
+                    for block in builder.blocks {
                         match block {
                             Block::Call(id) => {
                                 let sub_builder = builder.script_map.get(&id).unwrap();
@@ -163,18 +164,27 @@ impl Chunker {
                                 for instruction_res in script_buf.instructions() {
                                     let instruction = instruction_res.unwrap();
                                     match instruction {
-                                        Instruction::Op(OP_IF) | Instruction::Op(OP_ENDIF) | Instruction::Op(OP_NOTIF) => {
+                                        Instruction::Op(OP_IF)
+                                        | Instruction::Op(OP_ENDIF)
+                                        | Instruction::Op(OP_NOTIF) => {
                                             undo_info.call_stack.push(Box::new(
-                                                StructuredScript::new("").push_script(std::mem::take(&mut tmp_script)),
+                                                StructuredScript::new("")
+                                                    .push_script(std::mem::take(&mut tmp_script)),
                                             ));
-                                            tmp_script.push_instruction_no_opt(instruction);
+                                            tmp_script.push_instruction(instruction);
                                             undo_info.call_stack.push(Box::new(
-                                                StructuredScript::new("").push_script(std::mem::take(&mut tmp_script)),
+                                                StructuredScript::new("")
+                                                    .push_script(std::mem::take(&mut tmp_script)),
                                             ));
                                         }
-                                        _ => tmp_script.push_instruction_no_opt(instruction),
-
+                                        _ => tmp_script.push_instruction(instruction),
                                     }
+                                }
+                                if !tmp_script.is_empty() {
+                                            undo_info.call_stack.push(Box::new(
+                                                StructuredScript::new("")
+                                                    .push_script(tmp_script),
+                                            ));
                                 }
                             }
                         }
@@ -210,9 +220,6 @@ impl Chunker {
                 None => break, // the last block in the call stack
             };
 
-            //println!("[INFO] current chunk_len: {} -- current num_unclosed_ifs: {}", chunk_len, num_unclosed_ifs);
-            //println!("[INFO] Popping builder with size {} and num_unclosed_ifs {} from call_stack", builder.len(), builder.num_unclosed_ifs());
-
             assert!(
                 num_unclosed_ifs + builder.num_unclosed_ifs() >= 0,
                 "More OP_ENDIF's than OP_IF's in the script. num_unclosed_if: {:?}, builder: {:?}",
@@ -247,12 +254,16 @@ impl Chunker {
             } else if chunk_len + block_len > self.target_chunk_size
                 && (chunk_len < self.target_chunk_size - self.tolerance
                     || chunk_len == 0
-                    || depth <= max_depth)
+                    || (chunk_len < self.target_chunk_size && depth <= max_depth))
             {
                 // Case 3: Current builder too large and there is no acceptable solution yet
                 // Even if we have an acceptable solution we check if there is a better one in next depth calls
                 // Chunk inside a call of the current builder.
                 // Add all its calls to the call_stack.
+                if builder.is_script_buf() {
+                    self.call_stack.push(Box::new(builder));
+                    break;
+                }
                 let mut contains_call = false;
                 for block in builder.blocks.iter().rev() {
                     match block {
