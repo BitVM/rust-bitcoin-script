@@ -20,7 +20,6 @@ struct ChunkStats {
     altstack_output_size: usize,
 }
 
-//TODO: Refactor the undoing with this struct
 pub struct UndoInfo {
     call_stack: Vec<Box<StructuredScript>>,
     size: usize,
@@ -260,9 +259,7 @@ impl Chunker {
                     match block {
                         Block::Call(id) => {
                             let sub_builder = builder.script_map.get(id).unwrap();
-                            self.call_stack.push(Box::new(sub_builder.clone())); //TODO: Avoid cloning here by
-                                                                                 //putting Box<Builder> into
-                                                                                 //the script_map
+                            self.call_stack.push(Box::new(sub_builder.clone()));
                             contains_call = true;
                         }
                         Block::Script(script_buf) => {
