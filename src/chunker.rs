@@ -125,12 +125,8 @@ impl Chunker {
         stack_analyzer.analyze_blocks(chunk)
     }
 
-    pub fn undo(
-        &mut self,
-        mut num_unclosed_ifs: i32, //TODO: We should be able to use undo_info.num_unclosed_ifs
-        mut undo_info: UndoInfo,
-    ) -> (Vec<Box<StructuredScript>>, usize) {
-        if num_unclosed_ifs == 0 {
+    pub fn undo(&mut self, mut undo_info: UndoInfo) -> (Vec<Box<StructuredScript>>, usize) {
+        if undo_info.num_unclosed_ifs == 0 {
             return (vec![], 0);
         }
 
@@ -140,14 +136,14 @@ impl Chunker {
         loop {
             let builder = match undo_info.call_stack.pop() {
                 Some(builder) => builder,
-                None => panic!("num_unclosed_ifs != 0 but the undo_info call_stack is empty"), // the last block in the call stack
+                None => panic!("Not all OP_IF or OP_NOTIF are closed in the chunk but undoing/removing scripts from the end of the chunk violates the set tolerance. Number of unmatched OP_IF/OP_NOTIF: {}", undo_info.num_unclosed_ifs), // the last block in the call stack
             };
             if builder.contains_flow_op() {
                 if builder.is_script_buf() && builder.len() == 1 {
-                    num_unclosed_ifs -= builder.num_unclosed_ifs();
+                    undo_info.num_unclosed_ifs -= builder.num_unclosed_ifs();
                     removed_len += builder.len();
                     removed_scripts.push(builder);
-                    if num_unclosed_ifs == 0 {
+                    if undo_info.num_unclosed_ifs == 0 {
                         break;
                     }
                 } else {
@@ -158,7 +154,6 @@ impl Chunker {
                                 undo_info.call_stack.push(Box::new(sub_builder.clone()));
                             }
                             Block::Script(script_buf) => {
-                                //TODO: Can we avoid cloning or creating a builder here?
                                 // Split the script_buf at OP_IF/OP_NOTIF and OP_ENDIF
                                 let mut tmp_script = ScriptBuf::new();
                                 for instruction_res in script_buf.instructions() {
@@ -181,32 +176,29 @@ impl Chunker {
                                     }
                                 }
                                 if !tmp_script.is_empty() {
-                                            undo_info.call_stack.push(Box::new(
-                                                StructuredScript::new("")
-                                                    .push_script(tmp_script),
-                                            ));
+                                    undo_info.call_stack.push(Box::new(
+                                        StructuredScript::new("").push_script(tmp_script),
+                                    ));
                                 }
                             }
                         }
                     }
                 }
             } else {
-                // No OP_IF, OP_NOTIF or OP_ENDIF in that structured script so just remove it
+                // No OP_IF, OP_NOTIF or OP_ENDIF in that structured script so we will not include
+                // it in the chunk.
                 removed_len += builder.len();
                 removed_scripts.push(builder);
             }
         }
 
         self.call_stack.extend(removed_scripts);
-        assert!(num_unclosed_ifs >= 0, "More OP_ENDIF's than OP_IF's after undo step. (This means there is a bug in the undo logic.)");
-        assert_eq!(num_unclosed_ifs, 0, "Unable to make up for the OP_IF's in this chunk. Consider a larger target size or more tolerance. Unclosed OP_IF's: {:?}, removed_len: {}, undo.call_stack: {:?}, chunks: {:?}", num_unclosed_ifs, removed_len, undo_info.call_stack, self.chunks.iter().map(|chunk| chunk.size).collect::<Vec<_>>());
         (undo_info.call_stack, removed_len)
     }
 
     fn find_next_chunk(&mut self) -> Chunk {
         let mut chunk_scripts = vec![];
         let mut chunk_len = 0;
-        let mut num_unclosed_ifs = 0;
 
         // All not selected StructuredScripts that have to be added to the call_stack again
         let mut undo_info = UndoInfo::new();
@@ -221,42 +213,35 @@ impl Chunker {
             };
 
             assert!(
-                num_unclosed_ifs + builder.num_unclosed_ifs() >= 0,
+                undo_info.num_unclosed_ifs + builder.num_unclosed_ifs() >= 0,
                 "More OP_ENDIF's than OP_IF's in the script. num_unclosed_if: {:?}, builder: {:?}",
-                num_unclosed_ifs,
+                undo_info.num_unclosed_ifs,
                 builder.num_unclosed_ifs()
             );
 
             // TODO: Use stack analysis to find best possible chunk border
             let block_len = builder.len();
-            if chunk_len + block_len < self.target_chunk_size - self.tolerance {
-                // Case 1: Builder is too small. target - tolerance not yet reached with it.
-                num_unclosed_ifs += builder.num_unclosed_ifs();
-                chunk_scripts.push(Box::new(builder));
-                chunk_len += block_len;
-            } else if chunk_len + block_len <= self.target_chunk_size {
-                // Case 2: Adding the current builder remains a valid solution.
+            if chunk_len + block_len <= self.target_chunk_size {
+                // Adding the current builder remains a valid solution.
                 // TODO: Check with stack analyzer to see if adding the builder is better or not.
-                num_unclosed_ifs += builder.num_unclosed_ifs();
+                //       Consider the tolerance for that.
                 chunk_len += block_len;
-                if num_unclosed_ifs == 0 {
-                    // We are going to keep this structured script in the chunk
-                    // Reset the undo information
+                if undo_info.num_unclosed_ifs + builder.num_unclosed_ifs() == 0 {
+                    // We will keep this structured script in the chunk.
+                    // Reset the undo information.
                     chunk_scripts.extend(undo_info.reset());
                     chunk_scripts.push(Box::new(builder));
                 } else {
-                    // Update the undo information in case we need to remove this StructuredScript
-                    // from the chunk again
+                    // Update the undo information as we need to remove this StructuredScript
+                    // from the chunk if the if's are not closed in it eventually.
                     undo_info.update(builder);
                 }
                 // Reset the depth parameter
                 depth = 0;
             } else if chunk_len + block_len > self.target_chunk_size
-                && (chunk_len < self.target_chunk_size - self.tolerance
-                    || chunk_len == 0
-                    || (chunk_len < self.target_chunk_size && depth <= max_depth))
+                && (chunk_len < self.target_chunk_size && depth <= max_depth)
             {
-                // Case 3: Current builder too large and there is no acceptable solution yet
+                // Current builder too large and there is no acceptable solution yet
                 // Even if we have an acceptable solution we check if there is a better one in next depth calls
                 // Chunk inside a call of the current builder.
                 // Add all its calls to the call_stack.
@@ -275,7 +260,6 @@ impl Chunker {
                             contains_call = true;
                         }
                         Block::Script(script_buf) => {
-                            //TODO: Can we avoid cloning or creating a builder here?
                             self.call_stack.push(Box::new(
                                 StructuredScript::new("").push_script(script_buf.clone()),
                             ));
@@ -294,8 +278,8 @@ impl Chunker {
             }
         }
 
-        // Undo the lately added scripts until the num_unclosed_ifs is 0.
-        let undo_result = self.undo(num_unclosed_ifs, undo_info);
+        // Remove scripts from the end of the chunk until all if's are closed.
+        let undo_result = self.undo(undo_info);
         chunk_scripts.extend(undo_result.0);
         chunk_len -= undo_result.1;
 
