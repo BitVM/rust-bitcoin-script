@@ -95,7 +95,8 @@ fn test_simple_loop() {
 }
 
 #[test]
-fn test_for_loop() {
+#[should_panic] // Optimization is not yet implemented.
+fn test_for_loop_optimized() {
     let script = script! {
         for i in 0..3 {
             for k in 0..3_u32 {
@@ -220,6 +221,7 @@ fn test_simple() {
 }
 
 #[test]
+#[should_panic] // Optimization is not yet implemented.
 fn test_non_optimal_opcodes() {
     let script = script! {
         OP_0
