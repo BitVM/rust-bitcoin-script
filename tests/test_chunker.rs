@@ -1,4 +1,4 @@
-use bitcoin::{opcodes::all::OP_OVER, ScriptBuf};
+use bitcoin::ScriptBuf;
 use bitcoin_script::{script, Chunker};
 
 #[test]
