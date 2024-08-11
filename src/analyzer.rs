@@ -31,6 +31,12 @@ pub struct StackAnalyzer {
     last_constant: Option<i64>,
 }
 
+impl Default for StackAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StackAnalyzer {
     pub fn new() -> Self {
         StackAnalyzer {
@@ -60,7 +66,7 @@ impl StackAnalyzer {
                     self.handle_sub_script(called_script.get_stack());
                 }
                 Block::Script(block_script) => {
-                    for instruct in block_script.instructions().into_iter() {
+                    for instruct in block_script.instructions() {
                         match instruct {
                             Err(err) => {
                                 panic!("instruction extract fail from script {}", err);
@@ -82,16 +88,13 @@ impl StackAnalyzer {
     }
 
     pub fn handle_push_slice(&mut self, bytes: &PushBytes) {
-        match read_scriptint(bytes.as_bytes()) {
-            Ok(x) => {
-                // if i64(data) < 1000, last_constant is true
-                if x <= 1000 && x >= 0 {
-                    self.last_constant = Some(x);
-                } else {
-                    self.last_constant = None;
-                }
+        if let Ok(x) = read_scriptint(bytes.as_bytes()) {
+            // if i64(data) < 1000, last_constant is true
+            if (0..=1000).contains(&x) {
+                self.last_constant = Some(x);
+            } else {
+                self.last_constant = None;
             }
-            Err(_) => {}
         }
         self.stack_change(Self::plain_stack_status(0, 1));
     }
@@ -161,7 +164,7 @@ impl StackAnalyzer {
             },
             OP_PICK => match self.last_constant {
                 Some(x) => {
-                    self.stack_change(Self::plain_stack_status(-1 * (x + 1 + 1) as i32, 0));
+                    self.stack_change(Self::plain_stack_status(-((x + 1 + 1) as i32), 0));
                 }
                 None => {
                     panic!("need to be handled manually for op_pick")
@@ -169,7 +172,7 @@ impl StackAnalyzer {
             },
             OP_ROLL => match self.last_constant {
                 Some(x) => {
-                    self.stack_change(Self::plain_stack_status(-1 * (x + 1 + 1) as i32, -1));
+                    self.stack_change(Self::plain_stack_status(-((x + 1 + 1) as i32), -1));
                     // for [x2, x1, x0, 2, OP_PICK]
                 }
                 None => {
@@ -220,16 +223,16 @@ impl StackAnalyzer {
         let y = status.altstack_changed.borrow_mut();
 
         *i = min(*i, (*j) + stack_status.deepest_stack_accessed);
-        *j = *j + stack_status.stack_changed;
+        *j += stack_status.stack_changed;
 
         *x = min(*x, (*y) + stack_status.deepest_altstack_accessed);
-        *y = *y + stack_status.altstack_changed;
+        *y += stack_status.altstack_changed;
     }
 
     /// the first return is deepest access to current stack
     /// the second return is the impact for the stack
     fn opcode_stack_table(data: &Opcode) -> StackStatus {
-        let (i, j) = match data.clone() {
+        let (i, j) = match *data {
             OP_PUSHBYTES_0 | OP_PUSHBYTES_1 | OP_PUSHBYTES_2 | OP_PUSHBYTES_3 | OP_PUSHBYTES_4
             | OP_PUSHBYTES_5 | OP_PUSHBYTES_6 | OP_PUSHBYTES_7 | OP_PUSHBYTES_8
             | OP_PUSHBYTES_9 | OP_PUSHBYTES_10 | OP_PUSHBYTES_11 | OP_PUSHBYTES_12
@@ -314,7 +317,7 @@ impl StackAnalyzer {
             }
         };
 
-        let (x, y) = match data.clone() {
+        let (x, y) = match *data {
             OP_FROMALTSTACK => (-1, -1),
             OP_TOALTSTACK => (0, 1),
             _ => (0, 0),

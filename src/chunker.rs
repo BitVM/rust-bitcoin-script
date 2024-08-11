@@ -27,6 +27,12 @@ pub struct UndoInfo {
     num_unclosed_ifs: i32,
 }
 
+impl Default for UndoInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UndoInfo {
     pub fn new() -> Self {
         Self {
@@ -105,9 +111,9 @@ impl Chunker {
         for chunk in chunks.iter_mut() {
             let status = self.stack_analyze(&mut chunk.scripts);
             // ((-1 * access) as u32, (depth - access) as u32)
-            let stack_input_size = status.deepest_stack_accessed.abs() as usize;
+            let stack_input_size = status.deepest_stack_accessed.unsigned_abs() as usize;
             let stack_output_size = (status.stack_changed - status.deepest_stack_accessed) as usize;
-            let altstack_input_size = status.deepest_altstack_accessed.abs() as usize;
+            let altstack_input_size = status.deepest_altstack_accessed.unsigned_abs() as usize;
             let altstack_output_size =
                 (status.altstack_changed - status.deepest_altstack_accessed) as usize;
             chunk.stats = Some(ChunkStats {
@@ -253,7 +259,7 @@ impl Chunker {
                 for block in builder.blocks.iter().rev() {
                     match block {
                         Block::Call(id) => {
-                            let sub_builder = builder.script_map.get(&id).unwrap();
+                            let sub_builder = builder.script_map.get(id).unwrap();
                             self.call_stack.push(Box::new(sub_builder.clone())); //TODO: Avoid cloning here by
                                                                                  //putting Box<Builder> into
                                                                                  //the script_map

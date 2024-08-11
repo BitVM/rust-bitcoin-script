@@ -1,4 +1,4 @@
-use bitcoin::opcodes::all::{OP_ADD, OP_ENDIF};
+use bitcoin::opcodes::all::OP_ADD;
 use bitcoin_script::{script, Script};
 
 #[test]
@@ -383,8 +383,8 @@ fn test_is_script_buf() {
         OP_IF
         OP_ENDIF
     };
-    assert_eq!(script.is_script_buf(), true);
-    assert_eq!(script.contains_flow_op(), true);
+    assert!(script.is_script_buf());
+    assert!(script.contains_flow_op());
 }
 
 #[test]
@@ -392,6 +392,6 @@ fn test_is_script_buf_false() {
     let script = script! {
         { script! {OP_ADD} }
     };
-    assert_eq!(script.is_script_buf(), false);
-    assert_eq!(script.contains_flow_op(), false);
+    assert!(!script.is_script_buf());
+    assert!(!script.contains_flow_op());
 }

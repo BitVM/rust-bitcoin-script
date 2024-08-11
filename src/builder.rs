@@ -230,9 +230,7 @@ impl StructuredScript {
         let id = calculate_hash(&data);
         self.blocks.push(Block::Call(id));
         // Register script
-        if !self.script_map.contains_key(&id) {
-            self.script_map.insert(id, data);
-        }
+        self.script_map.entry(id).or_insert(data);
         self
     }
 
@@ -400,8 +398,8 @@ impl StructuredScript {
     }
 
     pub fn push_expression<T: Pushable>(self, expression: T) -> StructuredScript {
-        let builder = expression.bitcoin_script_push(self);
-        builder
+        
+        expression.bitcoin_script_push(self)
     }
 }
 
