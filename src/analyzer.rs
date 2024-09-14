@@ -1,10 +1,13 @@
 use crate::builder::{Block, StructuredScript};
+use crate::chunker::Chunk;
 use bitcoin::blockdata::opcodes::Opcode;
 use bitcoin::blockdata::script::{read_scriptint, Instruction};
 use bitcoin::opcodes::all::*;
 use bitcoin::script::PushBytes;
+use bitcoin::ScriptBuf;
+use script_macro::script;
 use std::borrow::BorrowMut;
-use std::cmp::min;
+use std::cmp::{max, min};
 use std::panic;
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -13,6 +16,25 @@ pub struct StackStatus {
     pub stack_changed: i32,
     pub deepest_altstack_accessed: i32,
     pub altstack_changed: i32,
+}
+
+impl StackStatus {
+    pub fn total_stack(&self) -> i32 {
+        self.stack_changed + self.altstack_changed
+    }
+
+    pub fn is_valid_final_state_without_inputs(&self) -> bool {
+        self.stack_changed == 1
+            && self.altstack_changed == 0
+            && self.deepest_altstack_accessed == 0
+            && self.deepest_stack_accessed == 0
+    }
+    
+    pub fn is_valid_final_state_with_inputs(&self) -> bool {
+        self.stack_changed == 1
+            && self.altstack_changed == 0
+            && self.deepest_altstack_accessed == 0
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -24,11 +46,13 @@ enum IfStackEle {
 
 #[derive(Debug, Clone)]
 pub struct StackAnalyzer {
+    debug_script: StructuredScript,
+    debug_position: usize,
     stack_status: StackStatus,
     // if_stack should be empty after analyzing
     if_stack: Vec<IfStackEle>,
     // last constant? for handling op_roll and op_pick
-    last_constant: Option<i64>,
+    pub last_constant: Option<i64>,
 }
 
 impl Default for StackAnalyzer {
@@ -40,30 +64,102 @@ impl Default for StackAnalyzer {
 impl StackAnalyzer {
     pub fn new() -> Self {
         StackAnalyzer {
+            debug_script: StructuredScript::new(""),
+            debug_position: 0,
             stack_status: StackStatus::default(),
             if_stack: vec![],
             last_constant: None,
         }
     }
 
-    pub fn analyze_blocks(&mut self, blocks: &mut Vec<Box<StructuredScript>>) -> StackStatus {
-        // println!("===============================");
-        for block in blocks {
-            // Maybe remove this clone?
-            self.handle_sub_script(block.get_stack());
+    pub fn with(start_stack: usize, start_altstack: usize, last_constant: Option<i64>) -> Self {
+        StackAnalyzer {
+            debug_script: StructuredScript::new(""),
+            debug_position: 0,
+            stack_status: StackStatus {
+                deepest_stack_accessed: 0,
+                stack_changed: start_stack as i32,
+                deepest_altstack_accessed: 0,
+                altstack_changed: start_altstack as i32,
+            },
+            if_stack: vec![],
+            last_constant,
+        }
+    }
+
+    pub fn total_stack_change(&self) -> i32 {
+        self.stack_status.altstack_changed + self.stack_status.stack_changed
+    }
+
+    pub fn reset(&mut self) {
+        self.debug_script = StructuredScript::new("");
+        self.debug_position = 0;
+        self.if_stack = vec![];
+        self.stack_status = StackStatus::default();
+    }
+
+    pub fn analyze_blocks(&mut self, scripts: &Vec<Box<StructuredScript>>) {
+        for script in scripts {
+            self.debug_script = *script.clone();
+            self.debug_position = 0;
+            match script.stack_hint() {
+                Some(stack_hint) => {
+                    self.debug_position += script.len();
+                    self.stack_change(stack_hint)
+                }
+                None => self.merge_script(script),
+            };
+        }
+    }
+    pub fn analyze_blocks_status(&mut self, scripts: &Vec<Box<StructuredScript>>) -> StackStatus {
+        for script in scripts {
+            self.debug_script = *script.clone();
+            self.debug_position = 0;
+            match script.stack_hint() {
+                Some(stack_hint) => {
+                    self.debug_position += script.len();
+                    self.stack_change(stack_hint)
+                }
+                None => self.merge_script(script),
+            };
         }
         self.get_status()
     }
 
-    pub fn analyze(&mut self, builder: &mut StructuredScript) -> StackStatus {
-        for block in builder.blocks.iter_mut() {
+    pub fn analyze_status(&mut self, script: &StructuredScript) -> StackStatus {
+        self.debug_script = script.clone();
+        self.debug_position = 0;
+        match script.stack_hint() {
+            Some(stack_hint) => self.stack_change(stack_hint),
+            None => self.merge_script(script),
+        };
+        self.get_status()
+    }
+
+    pub fn analyze(&mut self, script: &StructuredScript) {
+        self.debug_script = script.clone();
+        self.debug_position = 0;
+        match script.stack_hint() {
+            Some(stack_hint) => self.stack_change(stack_hint),
+            None => self.merge_script(script),
+        };
+    }
+
+    pub fn merge_script(&mut self, builder: &StructuredScript) {
+        for block in builder.blocks.iter() {
             match block {
                 Block::Call(id) => {
                     let called_script = builder
                         .script_map
-                        .get_mut(id)
+                        .get(id)
                         .expect("Missing entry for a called script");
-                    self.handle_sub_script(called_script.get_stack());
+                    match called_script.stack_hint() {
+                        Some(stack_hint) => {
+                            self.debug_position += called_script.len();
+                            self.stack_change(stack_hint)
+                        }
+                        None => self.merge_script(called_script),
+                    };
                 }
                 Block::Script(block_script) => {
                     for instruct in block_script.instructions() {
@@ -84,10 +180,10 @@ impl StackAnalyzer {
                 }
             }
         }
-        self.stack_status.clone()
     }
 
     pub fn handle_push_slice(&mut self, bytes: &PushBytes) {
+        self.debug_position += bytes.len() + 1;
         if let Ok(x) = read_scriptint(bytes.as_bytes()) {
             // if i64(data) < 1000, last_constant is true
             if (0..=1000).contains(&x) {
@@ -120,12 +216,28 @@ impl StackAnalyzer {
         }
     }
 
+    pub fn plain_altstack_status(x: i32, y: i32) -> StackStatus {
+        StackStatus {
+            deepest_stack_accessed: 0,
+            stack_changed: 0,
+            deepest_altstack_accessed: x,
+            altstack_changed: y,
+        }
+    }
+
     pub fn handle_opcode(&mut self, opcode: Opcode) {
         // handle if/else flow
         match opcode {
             OP_IF | OP_NOTIF => {
                 self.stack_change(Self::opcode_stack_table(&opcode));
                 self.if_stack.push(IfStackEle::IfFlow(Default::default()));
+            }
+            OP_RESERVED => {
+                panic!(
+                    "found DEBUG in {:?}\n entire builder: {:?}",
+                    self.debug_script.debug_info(self.debug_position),
+                    self.debug_script
+                )
             }
             OP_ELSE => match self.if_stack.pop().unwrap() {
                 IfStackEle::IfFlow(i) => {
@@ -136,38 +248,47 @@ impl StackAnalyzer {
                     panic!("shouldn't happend")
                 }
             },
-            OP_ENDIF => match self.if_stack.pop().unwrap() {
-                IfStackEle::IfFlow(stack_status) => {
-                    assert_eq!(
+            OP_ENDIF => {
+                match self.if_stack.pop().unwrap() {
+                    IfStackEle::IfFlow(stack_status) => {
+                        assert_eq!(
                         stack_status.stack_changed, 0,
-                        "only_if_flow shouldn't change stack status {:?}",
-                        stack_status
+                        "only_if_flow shouldn't change stack status {:?}\n\tat pos {:?}\n\tin {:?}",
+                        stack_status, self.debug_position, self.debug_script.debug_info(self.debug_position + 1)
                     );
-                    assert_eq!(
+                        assert_eq!(
                         stack_status.altstack_changed, 0,
-                        "only_if_flow shouldn't change alt stack status {:?},",
-                        stack_status
+                        "only_if_flow shouldn't change altstack status {:?}\n\tat pos {:?}\n\tin {:?}",
+                        stack_status, self.debug_position, self.debug_script.debug_info(self.debug_position + 1)
                     );
-                    self.stack_change(stack_status);
+                        self.stack_change(stack_status);
+                    }
+                    IfStackEle::ElseFlow((stack_status1, stack_status2)) => {
+                        assert_eq!(
+                            stack_status1.stack_changed,
+                            stack_status2.stack_changed,
+                            "if_flow and else_flow should change stack in the same way in {:?}",
+                            self.debug_script.debug_info(self.debug_position + 1)
+                        );
+                        assert_eq!(
+                            stack_status1.altstack_changed,
+                            stack_status2.altstack_changed,
+                            "if_flow and else_flow should change altstack in the same way in {:?}",
+                            self.debug_script.debug_info(self.debug_position + 1)
+                        );
+                        self.stack_change(Self::min_status(stack_status1, stack_status2));
+                    }
                 }
-                IfStackEle::ElseFlow((stack_status1, stack_status2)) => {
-                    assert_eq!(
-                        stack_status1.stack_changed, stack_status2.stack_changed,
-                        "if_flow and else_flow should change stack in the same way"
-                    );
-                    assert_eq!(
-                        stack_status1.altstack_changed, stack_status2.altstack_changed,
-                        "if_flow and else_flow should change alt stack in the same way"
-                    );
-                    self.stack_change(Self::min_status(stack_status1, stack_status2));
-                }
-            },
+            }
             OP_PICK => match self.last_constant {
                 Some(x) => {
                     self.stack_change(Self::plain_stack_status(-((x + 1 + 1) as i32), 0));
                 }
                 None => {
-                    panic!("need to be handled manually for op_pick")
+                    panic!(
+                        "need to be handled manually for op_pick in {:?}",
+                        self.debug_script.debug_info(self.debug_position)
+                    )
                 }
             },
             OP_ROLL => match self.last_constant {
@@ -176,13 +297,17 @@ impl StackAnalyzer {
                     // for [x2, x1, x0, 2, OP_PICK]
                 }
                 None => {
-                    panic!("need to be handled manually for op_roll")
+                    panic!(
+                        "need to be handled manually for op_roll in {:?}",
+                        self.debug_script.debug_info(self.debug_position)
+                    )
                 }
             },
             _ => {
                 self.stack_change(Self::opcode_stack_table(&opcode));
             }
         }
+        self.debug_position += 1;
 
         // handle last constant, used by op_roll and op_pick
         match opcode {
@@ -190,13 +315,10 @@ impl StackAnalyzer {
             | OP_PUSHNUM_6 | OP_PUSHNUM_7 | OP_PUSHNUM_8 | OP_PUSHNUM_9 | OP_PUSHNUM_10
             | OP_PUSHNUM_11 | OP_PUSHNUM_12 | OP_PUSHNUM_13 | OP_PUSHNUM_14 | OP_PUSHNUM_15
             | OP_PUSHNUM_16 => self.last_constant = Some((opcode.to_u8() - 0x50) as i64),
+            OP_DUP => (),
+            OP_PUSHBYTES_0 => self.last_constant = Some(0),
             _ => self.last_constant = None,
         }
-    }
-
-    pub fn handle_sub_script(&mut self, stack_status: StackStatus) {
-        self.last_constant = None;
-        self.stack_change(stack_status);
     }
 
     pub fn get_status(&self) -> StackStatus {
@@ -222,10 +344,23 @@ impl StackAnalyzer {
         let x = status.deepest_altstack_accessed.borrow_mut();
         let y = status.altstack_changed.borrow_mut();
 
-        *i = min(*i, (*j) + stack_status.deepest_stack_accessed);
+        // The second script's deepest stack access is reduced if there are still elements left on
+        // the stack from script 1.
+        let elements_on_intermediate_stack = (*j) - (*i);
+        let elements_on_intermediate_altstack = (*y) - (*x);
+        assert!(elements_on_intermediate_stack >= 0, "Script1 changes the stack by more items than it accesses. This means there is a bug in the stack_change() logic.");
+        assert!(elements_on_intermediate_stack >= 0, "Script1 changes the altstack by more items than it accesses. This means there is a bug in the stack_change() logic.");
+
+        *i += min(
+            0,
+            stack_status.deepest_stack_accessed + elements_on_intermediate_stack,
+        );
         *j += stack_status.stack_changed;
 
-        *x = min(*x, (*y) + stack_status.deepest_altstack_accessed);
+        *x += min(
+            0,
+            stack_status.deepest_altstack_accessed + elements_on_intermediate_altstack,
+        );
         *y += stack_status.altstack_changed;
     }
 

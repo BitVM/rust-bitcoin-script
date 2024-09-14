@@ -1,17 +1,35 @@
 use bitcoin_script::analyzer::StackStatus;
 use bitcoin_script::script;
 use bitcoin_script::Script;
+use bitcoin_script::StackAnalyzer;
 
 #[test]
 fn test_plain() {
-    let mut script = script! (
+    let script = script! (
         OP_ADD
         OP_ADD
-        OP_ADD
+        OP_1
     );
-    let status = script.get_stack();
-    assert_eq!(status.deepest_stack_accessed, -4);
-    assert_eq!(status.stack_changed, -3);
+    let mut analyzer = StackAnalyzer::new();
+    let status = analyzer.analyze_status(&script);
+    assert_eq!(status.deepest_stack_accessed, -3);
+    assert_eq!(status.stack_changed, -1);
+}
+
+#[test]
+fn test_two_scripts() {
+    let script = script! {
+        { script! { 
+            OP_ADD
+        }}
+        { script! { 
+            OP_ADD
+        }}
+    };
+    let mut analyzer = StackAnalyzer::new();
+    let status = analyzer.analyze_status(&script);
+    assert_eq!(status.deepest_stack_accessed, -3);
+    assert_eq!(status.stack_changed, -2);
 }
 
 fn inner_fn1() -> Script {
@@ -48,7 +66,8 @@ fn inner_fn2() -> Script {
 #[test]
 fn test_inner1() {
     let mut script = inner_fn1();
-    let status = script.get_stack();
+    let mut analyzer = StackAnalyzer::new();
+    let status = script.get_stack(&mut analyzer);
     assert_eq!(
         [status.deepest_stack_accessed, status.stack_changed],
         [-11, -1]
@@ -62,7 +81,8 @@ fn test_deepthest() {
         {inner_fn1()}
         OP_ADD
     );
-    let status = script.get_stack();
+    let mut analyzer = StackAnalyzer::new();
+    let status = script.get_stack(&mut analyzer);
     assert_eq!(
         [status.deepest_stack_accessed, status.stack_changed],
         [-12, -3]
@@ -73,7 +93,8 @@ fn test_deepthest() {
         { inner_fn2() }
         OP_ADD
     );
-    let status = script.get_stack();
+    let mut analyzer = StackAnalyzer::new();
+    let status = script.get_stack(&mut analyzer);
     assert_eq!(
         [status.deepest_stack_accessed, status.stack_changed],
         [0, 1]
@@ -89,7 +110,8 @@ fn test_deepthest2() {
             OP_ADD
         OP_ENDIF
     );
-    let status = script.get_stack();
+    let mut analyzer = StackAnalyzer::new();
+    let status = script.get_stack(&mut analyzer);
     assert_eq!(
         [status.deepest_stack_accessed, status.stack_changed],
         [-1, 0]
@@ -103,7 +125,8 @@ fn test_altstack() {
         OP_FROMALTSTACK
         OP_FROMALTSTACK
     );
-    let status = script.get_stack();
+    let mut analyzer = StackAnalyzer::new();
+    let status = script.get_stack(&mut analyzer);
     assert_eq!(
         status,
         StackStatus {
@@ -119,7 +142,8 @@ fn test_altstack() {
         OP_TOALTSTACK
         OP_TOALTSTACK
     );
-    let status = script.get_stack();
+    let mut analyzer = StackAnalyzer::new();
+    let status = script.get_stack(&mut analyzer);
     assert_eq!(
         status,
         StackStatus {
@@ -144,7 +168,8 @@ fn test_altstack_and_opif() {
         OP_TOALTSTACK
         OP_ENDIF
     );
-    let status = script.get_stack();
+    let mut analyzer = StackAnalyzer::new();
+    let status = script.get_stack(&mut analyzer);
     assert_eq!(
         status,
         StackStatus {
