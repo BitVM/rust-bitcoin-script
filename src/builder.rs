@@ -7,10 +7,35 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::RwLock;
 use std::{fs::File, io::Write};
 
 use crate::analyzer::{StackAnalyzer, StackStatus};
 use crate::chunker::Chunker;
+
+// One global script map per thread.
+thread_local! {
+    static SCRIPT_MAP: RwLock<HashMap<u64, Box<StructuredScript>>> =
+        RwLock::new(HashMap::new());
+}
+
+pub(crate) fn thread_add_script(id: u64, script: StructuredScript) {
+    SCRIPT_MAP.with(|script_map| {
+        let mut map = script_map.write().unwrap();
+        if !map.contains_key(&id) {
+            map.insert(id, Box::new(script));
+        }
+    });
+}
+
+pub(crate) fn thread_get_script(id: &u64) -> Box<StructuredScript> {
+    SCRIPT_MAP.with(|script_map| {
+        let map = script_map.read().unwrap();
+        map.get(id)
+            .expect("script id not found in SCRIPT_MAP")
+            .clone()
+    })
+}
 
 #[derive(Clone, Debug, Hash)]
 pub enum Block {
@@ -36,8 +61,6 @@ pub struct StructuredScript {
     extra_endif_positions: Vec<usize>,
     max_if_interval: (usize, usize),
     pub blocks: Vec<Block>,
-    // TODO: It may be worth to lazy initialize the script_map
-    pub script_map: HashMap<u64, StructuredScript>,
 }
 
 impl Hash for StructuredScript {
@@ -65,7 +88,6 @@ impl StructuredScript {
             extra_endif_positions: vec![],
             max_if_interval: (0, 0),
             blocks,
-            script_map: HashMap::new(),
         }
     }
 
@@ -87,7 +109,9 @@ impl StructuredScript {
         if self.is_script_buf() {
             match &self.blocks[0] {
                 Block::Call(_) => unreachable!(),
-                Block::Script(block_script) => block_script.instructions().collect::<Vec<_>>().len() == 1,
+                Block::Script(block_script) => {
+                    block_script.instructions().collect::<Vec<_>>().len() == 1
+                }
             }
         } else {
             false
@@ -109,10 +133,7 @@ impl StructuredScript {
             assert!(current_pos <= position, "Target position not found");
             match block {
                 Block::Call(id) => {
-                    let called_script = self
-                        .script_map
-                        .get(id)
-                        .expect("Missing entry for a called script");
+                    let called_script = thread_get_script(id);
                     if position >= current_pos && position < current_pos + called_script.len() {
                         return called_script.debug_info(position - current_pos);
                     }
@@ -259,8 +280,8 @@ impl StructuredScript {
         self.num_unclosed_ifs += data.num_unclosed_ifs;
         let id = calculate_hash(&data);
         self.blocks.push(Block::Call(id));
-        // Register script
-        self.script_map.entry(id).or_insert(data);
+        // Register script in the global script map
+        thread_add_script(id, data);
         self
     }
 
@@ -270,10 +291,7 @@ impl StructuredScript {
         for block in self.blocks.as_slice() {
             match block {
                 Block::Call(id) => {
-                    let called_script = self
-                        .script_map
-                        .get(id)
-                        .expect("Missing entry for a called script");
+                    let called_script = thread_get_script(id);
                     // Check if the script with the hash id is in cache
                     match cache.get(id) {
                         Some(called_start) => {
@@ -329,6 +347,7 @@ impl StructuredScript {
     }
 
     pub fn compile(self) -> ScriptBuf {
+        println!("starting compile step");
         let mut script = Vec::with_capacity(self.size);
         let mut cache = HashMap::new();
         self.compile_to_bytes(&mut script, &mut cache);
@@ -348,12 +367,8 @@ impl StructuredScript {
             File::create("analyzed_chunk_stats.txt").expect("Unable to create stats file");
         let chunk_stats = chunker.chunks.iter().map(|chunk| chunk.stats.clone());
         for entry in chunk_stats {
-            writeln!(
-                stats_file,
-                "{:?}",
-                entry.stack_input_size
-            )
-            .expect("Unable to write to stats file");
+            writeln!(stats_file, "{:?}", entry.stack_input_size)
+                .expect("Unable to write to stats file");
         }
         let mut chunk_sizes_iter = chunk_sizes.iter();
         let mut scripts = vec![];
@@ -397,19 +412,19 @@ impl StructuredScript {
             Some(hint) => {
                 hint.stack_changed = changed;
                 hint.deepest_stack_accessed = access;
-            },
-            None => self.stack_hint = Some(StackAnalyzer::plain_stack_status(access, changed))
+            }
+            None => self.stack_hint = Some(StackAnalyzer::plain_stack_status(access, changed)),
         }
         self
     }
-    
+
     pub fn add_altstack_hint(mut self, access: i32, changed: i32) -> Self {
         match &mut self.stack_hint {
             Some(hint) => {
                 hint.altstack_changed = changed;
                 hint.deepest_altstack_accessed = access;
-            },
-            None => self.stack_hint = Some(StackAnalyzer::plain_stack_status(access, changed))
+            }
+            None => self.stack_hint = Some(StackAnalyzer::plain_stack_status(access, changed)),
         }
         self
     }
