@@ -1,14 +1,10 @@
 use core::panic;
 
-use bitcoin::{
-    opcodes::all::{OP_ENDIF, OP_IF, OP_NOTIF},
-    script::Instruction,
-    ScriptBuf,
-};
+use bitcoin::ScriptBuf;
 
 use crate::{
-    analyzer::{self, StackStatus},
-    builder::{Block, StructuredScript},
+    analyzer::StackStatus,
+    builder::{thread_get_script, Block, StructuredScript},
     StackAnalyzer,
 };
 
@@ -203,11 +199,11 @@ impl Chunker {
                     );
                 }
             } else {
-                for block in builder.blocks {
+                for block in &builder.blocks {
                     match block {
                         Block::Call(id) => {
-                            let sub_builder = builder.script_map.get(&id).unwrap();
-                            undo_info.call_stack.push(Box::new(sub_builder.clone()));
+                            let sub_builder = thread_get_script(id);
+                            undo_info.call_stack.push(sub_builder);
                         }
                         Block::Script(script_buf) => {
                             // Split the script_buf
@@ -287,8 +283,8 @@ impl Chunker {
                 for block in builder.blocks.iter().rev() {
                     match block {
                         Block::Call(id) => {
-                            let sub_builder = builder.script_map.get(id).unwrap();
-                            self.call_stack.push(Box::new(sub_builder.clone()));
+                            let sub_builder = thread_get_script(id);
+                            self.call_stack.push(sub_builder);
                             contains_call = true;
                         }
                         Block::Script(script_buf) => {
@@ -322,10 +318,10 @@ impl Chunker {
                 .try_into()
                 .expect("Consuming more stack elements than there are on the stack 3"),
             altstack_input_size: input_altstack_size,
-            altstack_output_size: status
-                .altstack_changed
-                .try_into()
-                .expect(&format!("Consuming more stack elements than there are on the altstack: {:?}", status)),
+            altstack_output_size: status.altstack_changed.try_into().expect(&format!(
+                "Consuming more stack elements than there are on the altstack: {:?}",
+                status
+            )),
         };
 
         Chunk::new(chunk_scripts, chunk_len, chunk_stats, last_constant)

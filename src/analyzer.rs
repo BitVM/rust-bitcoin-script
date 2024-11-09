@@ -1,13 +1,10 @@
-use crate::builder::{Block, StructuredScript};
-use crate::chunker::Chunk;
+use crate::builder::{thread_get_script, Block, StructuredScript};
 use bitcoin::blockdata::opcodes::Opcode;
 use bitcoin::blockdata::script::{read_scriptint, Instruction};
 use bitcoin::opcodes::all::*;
 use bitcoin::script::PushBytes;
-use bitcoin::ScriptBuf;
-use script_macro::script;
 use std::borrow::BorrowMut;
-use std::cmp::{max, min};
+use std::cmp::min;
 use std::panic;
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -149,16 +146,13 @@ impl StackAnalyzer {
         for block in builder.blocks.iter() {
             match block {
                 Block::Call(id) => {
-                    let called_script = builder
-                        .script_map
-                        .get(id)
-                        .expect("Missing entry for a called script");
+                    let called_script = thread_get_script(id);
                     match called_script.stack_hint() {
                         Some(stack_hint) => {
                             self.debug_position += called_script.len();
                             self.stack_change(stack_hint)
                         }
-                        None => self.merge_script(called_script),
+                        None => self.merge_script(&called_script),
                     };
                 }
                 Block::Script(block_script) => {

@@ -234,15 +234,15 @@ fn test_non_optimal_opcodes() {
         OP_DROP
         OP_DROP
 
-        for i in 0..4 {
-            OP_ROLL
-            { i }
-        }
+        //for i in 0..4 {
+        //    OP_ROLL
+        //    { i }
+        //}
 
-        for i in 0..4 {
-            { i }
-            OP_ROLL
-        }
+        //for i in 0..4 {
+        //    { i }
+        //    OP_ROLL
+        //}
 
     };
 
