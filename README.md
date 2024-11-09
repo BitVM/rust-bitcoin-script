@@ -1,6 +1,6 @@
 # Bitvm Bitcoin Script
 
-Utilities used in the official [BitVM](`https://github.com/BitVM/BitVM`) implementation to generate Bitcoin Script. Heavily inspired by [rust-bitcoin-script's inline macro](`https://github.com/mappum/rust-bitcoin-script`).
+Utilities used in the official [BitVM](https://github.com/BitVM/BitVM) implementation to generate Bitcoin Script. Heavily inspired by [rust-bitcoin-script's inline macro](https://github.com/mappum/rust-bitcoin-script).
 
 ## Usage
 
