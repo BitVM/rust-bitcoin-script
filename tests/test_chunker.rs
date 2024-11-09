@@ -1,5 +1,5 @@
-use bitcoin::{opcodes::all::{OP_FROMALTSTACK, OP_TOALTSTACK}, ScriptBuf};
-use bitcoin_script::{chunker::ChunkStats, script, Chunker};
+use bitcoin::ScriptBuf;
+use bitcoin_script::{script, Chunker};
 
 #[test]
 fn test_chunker_simple() {

@@ -22,9 +22,7 @@ thread_local! {
 pub(crate) fn thread_add_script(id: u64, script: StructuredScript) {
     SCRIPT_MAP.with(|script_map| {
         let mut map = script_map.write().unwrap();
-        if !map.contains_key(&id) {
-            map.insert(id, Box::new(script));
-        }
+        map.entry(id).or_insert_with(|| Box::new(script));
     });
 }
 
@@ -119,7 +117,7 @@ impl StructuredScript {
     }
 
     pub fn has_stack_hint(&self) -> bool {
-        self.stack_hint != None
+        self.stack_hint.is_some()
     }
 
     pub fn num_unclosed_ifs(&self) -> i32 {
@@ -401,8 +399,8 @@ impl StructuredScript {
         match &self.stack_hint {
             Some(x) => x.clone(),
             None => {
-                let stack_status = analyzer.analyze_status(self);
-                stack_status
+                
+                analyzer.analyze_status(self)
             }
         }
     }

@@ -101,7 +101,7 @@ impl UndoInfo {
                 return true;
             }
         }
-        return false;
+        false
     }
 }
 
@@ -318,10 +318,12 @@ impl Chunker {
                 .try_into()
                 .expect("Consuming more stack elements than there are on the stack 3"),
             altstack_input_size: input_altstack_size,
-            altstack_output_size: status.altstack_changed.try_into().expect(&format!(
-                "Consuming more stack elements than there are on the altstack: {:?}",
-                status
-            )),
+            altstack_output_size: status.altstack_changed.try_into().unwrap_or_else(|_| {
+                panic!(
+                    "Consuming more stack elements than there are on the altstack: {:?}",
+                    status
+                )
+            }),
         };
 
         Chunk::new(chunk_scripts, chunk_len, chunk_stats, last_constant)
