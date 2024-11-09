@@ -65,7 +65,7 @@ fn inner_fn2() -> Script {
 
 #[test]
 fn test_inner1() {
-    let mut script = inner_fn1();
+    let script = inner_fn1();
     let mut analyzer = StackAnalyzer::new();
     let status = script.get_stack(&mut analyzer);
     assert_eq!(
@@ -76,7 +76,7 @@ fn test_inner1() {
 
 #[test]
 fn test_deepthest() {
-    let mut script = script! (
+    let script = script! (
         {inner_fn1()}
         {inner_fn1()}
         OP_ADD
@@ -88,7 +88,7 @@ fn test_deepthest() {
         [-12, -3]
     );
 
-    let mut script = script!(
+    let script = script!(
         { inner_fn2() }
         { inner_fn2() }
         OP_ADD
@@ -103,7 +103,7 @@ fn test_deepthest() {
 
 #[test]
 fn test_deepthest2() {
-    let mut script = script! (
+    let script = script! (
         {1}
         OP_IF
             { 120 }
@@ -120,7 +120,7 @@ fn test_deepthest2() {
 
 #[test]
 fn test_altstack() {
-    let mut script = script! (
+    let script = script! (
         OP_FROMALTSTACK
         OP_FROMALTSTACK
         OP_FROMALTSTACK
@@ -137,7 +137,7 @@ fn test_altstack() {
         }
     );
 
-    let mut script = script!(
+    let script = script!(
         OP_TOALTSTACK
         OP_TOALTSTACK
         OP_TOALTSTACK
@@ -157,7 +157,7 @@ fn test_altstack() {
 
 #[test]
 fn test_altstack_and_opif() {
-    let mut script = script! (
+    let script = script! (
         OP_IF
         OP_FROMALTSTACK
         OP_SUB
