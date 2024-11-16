@@ -26,11 +26,9 @@ impl StackStatus {
             && self.deepest_altstack_accessed == 0
             && self.deepest_stack_accessed == 0
     }
-    
+
     pub fn is_valid_final_state_with_inputs(&self) -> bool {
-        self.stack_changed == 1
-            && self.altstack_changed == 0
-            && self.deepest_altstack_accessed == 0
+        self.stack_changed == 1 && self.altstack_changed == 0 && self.deepest_altstack_accessed == 0
     }
 }
 
@@ -321,18 +319,11 @@ impl StackAnalyzer {
     }
 
     fn stack_change(&mut self, stack_status: StackStatus) {
-        let status;
-        match self.if_stack.last_mut() {
-            None => {
-                status = self.stack_status.borrow_mut();
-            }
-            Some(IfStackEle::IfFlow(stack_status)) => {
-                status = stack_status.borrow_mut();
-            }
-            Some(IfStackEle::ElseFlow((_, stack_status))) => {
-                status = stack_status.borrow_mut();
-            }
-        }
+        let status = match self.if_stack.last_mut() {
+            None => self.stack_status.borrow_mut(),
+            Some(IfStackEle::IfFlow(stack_status)) => stack_status.borrow_mut(),
+            Some(IfStackEle::ElseFlow((_, stack_status))) => stack_status.borrow_mut(),
+        };
         let i = status.deepest_stack_accessed.borrow_mut();
         let j = status.stack_changed.borrow_mut();
         let x = status.deepest_altstack_accessed.borrow_mut();
