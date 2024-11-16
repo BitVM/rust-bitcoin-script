@@ -129,9 +129,7 @@ impl Chunk {
     }
 
     pub fn total_stack_size(&self) -> usize {
-        (self.stats.stack_output_size)
-            .try_into()
-            .expect("Chunk stack size negative at the end. This is a bug.")
+        self.stats.stack_output_size
     }
 }
 
@@ -241,12 +239,7 @@ impl Chunker {
         let max_depth = 8;
         let mut depth = 0;
 
-        loop {
-            let builder = match self.call_stack.pop() {
-                Some(builder) => *builder,
-                None => break,
-            };
-
+        while let Some(builder) = self.call_stack.pop() {
             assert!(
                 undo_info.num_unclosed_ifs + builder.num_unclosed_ifs() >= 0,
                 "More OP_ENDIF's than OP_IF's in the script. num_unclosed_if: {:?} at positions: {:?}",
@@ -259,7 +252,7 @@ impl Chunker {
             if chunk_len + block_len <= self.target_chunk_size {
                 // Adding the current builder remains a valid solution regarding chunk size.
                 chunk_len += block_len;
-                undo_info.update(builder);
+                undo_info.update(*builder);
                 if undo_info.valid(self.stack_limit) {
                     // We will keep all the structured scripts in undo_info in the chunk.
                     chunk_scripts.extend(undo_info.reset());
@@ -276,7 +269,7 @@ impl Chunker {
 
                 // Don't split up script_bufs and scripts that have a (manually set) stack hint.
                 if builder.is_script_buf() || builder.has_stack_hint() {
-                    self.call_stack.push(Box::new(builder));
+                    self.call_stack.push(builder);
                     break;
                 }
                 let mut contains_call = false;
@@ -302,7 +295,7 @@ impl Chunker {
                 );
                 depth += 1;
             } else {
-                self.call_stack.push(Box::new(builder));
+                self.call_stack.push(builder);
                 break;
             }
         }

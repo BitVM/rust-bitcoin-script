@@ -150,10 +150,7 @@ impl StructuredScript {
 
     fn get_script_block(&mut self) -> &mut ScriptBuf {
         // Check if the last block is a Script block
-        let is_script_block = match self.blocks.last_mut() {
-            Some(Block::Script(_)) => true,
-            _ => false,
-        };
+        let is_script_block = matches!(self.blocks.last_mut(), Some(Block::Script(_)));
 
         // Create a new Script block if necessary
         if !is_script_block {
@@ -385,12 +382,12 @@ impl StructuredScript {
         (chunk_sizes, scripts)
     }
 
-    pub fn analyze_stack(mut self) -> StackStatus {
+    pub fn analyze_stack(self) -> StackStatus {
         match self.stack_hint {
             Some(hint) => hint,
             None => {
                 let mut analyzer = StackAnalyzer::new();
-                analyzer.analyze_status(&mut self)
+                analyzer.analyze_status(&self)
             }
         }
     }
@@ -398,10 +395,7 @@ impl StructuredScript {
     pub fn get_stack(&self, analyzer: &mut StackAnalyzer) -> StackStatus {
         match &self.stack_hint {
             Some(x) => x.clone(),
-            None => {
-                
-                analyzer.analyze_status(self)
-            }
+            None => analyzer.analyze_status(self),
         }
     }
 
