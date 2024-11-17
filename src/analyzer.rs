@@ -154,12 +154,12 @@ impl StackAnalyzer {
                     };
                 }
                 Block::Script(block_script) => {
-                    for instruct in block_script.instructions() {
-                        match instruct {
+                    for result in block_script.instructions() {
+                        match result {
                             Err(err) => {
                                 panic!("instruction extract fail from script {}", err);
                             }
-                            Ok(x) => match x {
+                            Ok(instruction) => match instruction {
                                 Instruction::PushBytes(bytes) => {
                                     self.handle_push_slice(bytes);
                                 }

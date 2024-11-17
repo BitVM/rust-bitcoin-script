@@ -8,10 +8,8 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::RwLock;
-use std::{fs::File, io::Write};
 
 use crate::analyzer::{StackAnalyzer, StackStatus};
-use crate::chunker::Chunker;
 
 // One global script map per thread.
 thread_local! {
@@ -51,7 +49,6 @@ impl Block {
 #[derive(Clone, Debug)]
 pub struct StructuredScript {
     size: usize,
-    // stack_hint will cache the result of stack analzyer
     stack_hint: Option<StackStatus>,
     pub debug_identifier: String,
     num_unclosed_ifs: i32,
@@ -342,44 +339,10 @@ impl StructuredScript {
     }
 
     pub fn compile(self) -> ScriptBuf {
-        println!("starting compile step");
         let mut script = Vec::with_capacity(self.size);
         let mut cache = HashMap::new();
         self.compile_to_bytes(&mut script, &mut cache);
         ScriptBuf::from_bytes(script)
-    }
-
-    pub fn compile_to_chunks(
-        self,
-        target_chunk_size: usize,
-        stack_limit: usize,
-    ) -> (Vec<usize>, Vec<ScriptBuf>) {
-        let mut chunker = Chunker::new(self, target_chunk_size, stack_limit);
-        let chunk_sizes = chunker.find_chunks();
-
-        // Write the analyzed chunk stats (stack change) to a file
-        let mut stats_file =
-            File::create("analyzed_chunk_stats.txt").expect("Unable to create stats file");
-        let chunk_stats = chunker.chunks.iter().map(|chunk| chunk.stats.clone());
-        for entry in chunk_stats {
-            writeln!(stats_file, "{:?}", entry.stack_input_size)
-                .expect("Unable to write to stats file");
-        }
-        let mut chunk_sizes_iter = chunk_sizes.iter();
-        let mut scripts = vec![];
-        for chunk in chunker.chunks {
-            let mut script = Vec::with_capacity(
-                *chunk_sizes_iter
-                    .next()
-                    .expect("Less chunk sizes than there are chunks"),
-            );
-            for builder in chunk.scripts {
-                let mut cache = HashMap::new();
-                builder.compile_to_bytes(&mut script, &mut cache);
-            }
-            scripts.push(script.into());
-        }
-        (chunk_sizes, scripts)
     }
 
     pub fn analyze_stack(self) -> StackStatus {
