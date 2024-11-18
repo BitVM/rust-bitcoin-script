@@ -407,7 +407,7 @@ fn test_is_script_buf_false() {
 fn test_push_witness() {
     for i in 0..512 {
         let mut witness = Witness::new();
-        let vec = vec![1u8; i];
+        let vec = vec![129u8; i];
         witness.push(vec.clone());
         let script = script! {
             { witness }
