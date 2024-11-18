@@ -345,11 +345,13 @@ impl StructuredScript {
         self.compile_to_bytes(&mut script, &mut cache);
         // Ensure that the builder has minimal opcodes:
         let script_buf = ScriptBuf::from_bytes(script);
+        let mut instructions_iter = script_buf.instructions();
         for result in script_buf.instructions_minimal() {
+            let instruction = instructions_iter.next();
             match result {
                 Ok(_) => (),
                 Err(err) => {
-                    panic!("Error while parsing script instruction: {:?}", err);
+                    panic!("Error while parsing script instruction: {:?}, {:?}", err, instruction);
                 }
             }
         }
