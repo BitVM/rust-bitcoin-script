@@ -343,7 +343,17 @@ impl StructuredScript {
         let mut script = Vec::with_capacity(self.size);
         let mut cache = HashMap::new();
         self.compile_to_bytes(&mut script, &mut cache);
-        ScriptBuf::from_bytes(script)
+        // Ensure that the builder has minimal opcodes:
+        let script_buf = ScriptBuf::from_bytes(script);
+        for result in script_buf.instructions_minimal() {
+            match result {
+                Ok(_) => (),
+                Err(err) => {
+                    panic!("Error while parsing script instruction: {:?}", err);
+                }
+            }
+        }
+        script_buf
     }
 
     pub fn analyze_stack(self) -> StackStatus {
