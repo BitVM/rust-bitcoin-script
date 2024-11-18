@@ -3,6 +3,7 @@ use bitcoin::blockdata::script::{Instruction, PushBytes, PushBytesBuf, ScriptBuf
 use bitcoin::opcodes::all::{OP_ENDIF, OP_IF, OP_NOTIF};
 use bitcoin::opcodes::{OP_0, OP_TRUE};
 use bitcoin::script::write_scriptint;
+use bitcoin::Witness;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -463,7 +464,11 @@ impl NotU8Pushable for usize {
 }
 impl NotU8Pushable for Vec<u8> {
     fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
-        builder.push_slice(PushBytesBuf::try_from(self).unwrap())
+        if self.len() == 1 && self[0] <= 16 {
+            builder.push_int(self[0].into())
+        } else {
+            builder.push_slice(PushBytesBuf::try_from(self).unwrap())
+        }
     }
 }
 impl NotU8Pushable for ::bitcoin::PublicKey {
@@ -474,6 +479,19 @@ impl NotU8Pushable for ::bitcoin::PublicKey {
 impl NotU8Pushable for ::bitcoin::XOnlyPublicKey {
     fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
         builder.push_x_only_key(&self)
+    }
+}
+impl NotU8Pushable for Witness {
+    fn bitcoin_script_push(self, mut builder: StructuredScript) -> StructuredScript {
+        for element in self.into_iter() {
+            // Push the element with a minimal opcode if it is in [0, 16].
+            if element.len() == 1 && element[0] <= 16 {
+                builder = builder.push_int(element[0].into());
+            } else {
+                builder = builder.push_slice(PushBytesBuf::try_from(element.to_vec()).unwrap());
+            }
+        }
+        builder
     }
 }
 impl NotU8Pushable for StructuredScript {
