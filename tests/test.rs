@@ -1,4 +1,8 @@
-use bitcoin::opcodes::all::OP_ADD;
+use bitcoin::{
+    consensus::{self, encode, Encodable},
+    opcodes::all::OP_ADD,
+    Witness,
+};
 use bitcoin_script::{script, Script};
 
 #[test]
@@ -374,7 +378,8 @@ fn test_if_max_interval() {
     let if_interval = script.max_op_if_interval();
     println!(
         "Max interval debug info: {}, {}",
-        script.debug_info(if_interval.0), script.debug_info(if_interval.1)
+        script.debug_info(if_interval.0),
+        script.debug_info(if_interval.1)
     );
     assert_eq!(if_interval, (0, 9));
 }
@@ -396,4 +401,51 @@ fn test_is_script_buf_false() {
     };
     assert!(!script.is_script_buf());
     assert!(!script.contains_flow_op());
+}
+
+#[test]
+fn test_push_witness() {
+    for i in 0..512 {
+        let mut witness = Witness::new();
+        let vec = vec![1u8; i];
+        witness.push(vec.clone());
+        let script = script! {
+            { witness }
+        };
+        let reference_script = script! {
+            { vec }
+        };
+        assert_eq!(
+            script.compile().as_bytes(),
+            reference_script.compile().as_bytes(),
+            "here"
+        );
+    }
+
+    let mut witness = Witness::new();
+    for i in 0..16 {
+        let mut varint = Vec::new();
+        encode::VarInt(i).consensus_encode(&mut varint).unwrap();
+        witness.push(varint);
+    }
+
+    let mut forty_two_varint = Vec::new();
+    encode::VarInt(42u64)
+        .consensus_encode(&mut forty_two_varint)
+        .unwrap();
+    witness.push(forty_two_varint);
+    let script = script! {
+        { witness }
+    };
+
+    let reference_script = script! {
+        for i in 0..16 {
+            { i }
+        }
+        { 42 }
+    };
+    assert_eq!(
+        script.compile().as_bytes(),
+        reference_script.compile().as_bytes()
+    );
 }
