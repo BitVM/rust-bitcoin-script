@@ -8,31 +8,8 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::RwLock;
 
 use crate::analyzer::{StackAnalyzer, StackStatus};
-
-// One global script map per thread.
-thread_local! {
-    static SCRIPT_MAP: RwLock<HashMap<u64, Box<StructuredScript>>> =
-        RwLock::new(HashMap::new());
-}
-
-pub(crate) fn thread_add_script(id: u64, script: StructuredScript) {
-    SCRIPT_MAP.with(|script_map| {
-        let mut map = script_map.write().unwrap();
-        map.entry(id).or_insert_with(|| Box::new(script));
-    });
-}
-
-pub(crate) fn thread_get_script(id: &u64) -> Box<StructuredScript> {
-    SCRIPT_MAP.with(|script_map| {
-        let map = script_map.read().unwrap();
-        map.get(id)
-            .expect("script id not found in SCRIPT_MAP")
-            .clone()
-    })
-}
 
 #[derive(Clone, Debug, Hash)]
 pub enum Block {
@@ -57,11 +34,11 @@ pub struct StructuredScript {
     extra_endif_positions: Vec<usize>,
     max_if_interval: (usize, usize),
     pub blocks: Vec<Block>,
+    script_map: HashMap<u64, StructuredScript>,
 }
 
 impl Hash for StructuredScript {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.size.hash(state);
         self.blocks.hash(state);
     }
 }
@@ -84,11 +61,24 @@ impl StructuredScript {
             extra_endif_positions: vec![],
             max_if_interval: (0, 0),
             blocks,
+            script_map: HashMap::new(),
         }
     }
 
     pub fn len(&self) -> usize {
         self.size
+    }
+
+    pub fn add_structured_script(&mut self, id: u64, script: StructuredScript) {
+        self.script_map.entry(id).or_insert(script);
+    }
+    
+    pub fn get_structured_script(&self, id: &u64) -> &StructuredScript {
+        self.script_map.get(id)
+            .expect(&format!(
+                "script id: {} not found in script_map.",
+                id
+            ))
     }
 
     pub fn contains_flow_op(&self) -> bool {
@@ -129,7 +119,11 @@ impl StructuredScript {
             assert!(current_pos <= position, "Target position not found");
             match block {
                 Block::Call(id) => {
-                    let called_script = thread_get_script(id);
+                    //let called_script = self.get_structured_script(id);
+                    let called_script = self
+                        .script_map
+                        .get(id)
+                        .expect("Missing entry for a called script");
                     if position >= current_pos && position < current_pos + called_script.len() {
                         return called_script.debug_info(position - current_pos);
                     }
@@ -244,6 +238,12 @@ impl StructuredScript {
     }
 
     pub fn push_env_script(mut self, mut data: StructuredScript) -> StructuredScript {
+        if data.len() == 0 {
+            return self;
+        }
+        if self.len() == 0 {
+            return data;
+        }
         data.debug_identifier = format!("{} {}", self.debug_identifier, data.debug_identifier);
         // Try closing ifs
         let num_closable_ifs = min(
@@ -273,8 +273,8 @@ impl StructuredScript {
         self.num_unclosed_ifs += data.num_unclosed_ifs;
         let id = calculate_hash(&data);
         self.blocks.push(Block::Call(id));
-        // Register script in the global script map
-        thread_add_script(id, data);
+        // Register script in the script map
+        self.add_structured_script(id, data);
         self
     }
 
@@ -284,7 +284,10 @@ impl StructuredScript {
         for block in self.blocks.as_slice() {
             match block {
                 Block::Call(id) => {
-                    let called_script = thread_get_script(id);
+                    let called_script = self
+                        .script_map
+                        .get(id)
+                        .expect("Missing entry for a called script");
                     // Check if the script with the hash id is in cache
                     match cache.get(id) {
                         Some(called_start) => {
