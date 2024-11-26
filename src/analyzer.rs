@@ -1,4 +1,4 @@
-use crate::builder::{thread_get_script, Block, StructuredScript};
+use crate::builder::{Block, StructuredScript};
 use bitcoin::blockdata::opcodes::Opcode;
 use bitcoin::blockdata::script::{read_scriptint, Instruction};
 use bitcoin::opcodes::all::*;
@@ -144,7 +144,7 @@ impl StackAnalyzer {
         for block in builder.blocks.iter() {
             match block {
                 Block::Call(id) => {
-                    let called_script = thread_get_script(id);
+                    let called_script = builder.get_structured_script(id);
                     match called_script.stack_hint() {
                         Some(stack_hint) => {
                             self.debug_position += called_script.len();

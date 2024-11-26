@@ -1,5 +1,5 @@
 use bitcoin::{
-    consensus::{self, encode, Encodable},
+    consensus::{encode, Encodable},
     opcodes::all::OP_ADD,
     Witness,
 };
@@ -397,6 +397,7 @@ fn test_is_script_buf() {
 #[test]
 fn test_is_script_buf_false() {
     let script = script! {
+        OP_ADD
         { script! {OP_ADD} }
     };
     assert!(!script.is_script_buf());
