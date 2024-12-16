@@ -596,6 +596,30 @@ mod tests {
     use bitcoin::blockdata::opcodes::all as opcodes;
     use quote::quote;
 
+    macro_rules! test_opcode {
+        ($name:ident, $input:expr, $expected:expr) => {
+            #[test]
+            fn $name() {
+                let syntax = parse(quote!($input));
+                if let Syntax::Opcode(opcode) = &syntax[0].0 {
+                    assert_eq!(*opcode, $expected);
+                } else {
+                    panic!("Expected Syntax::Opcode, got {:?}", syntax[0].0);
+                }
+            }
+        };
+    }
+
+    macro_rules! test_invalid_opcode {
+        ($name:ident, $input:expr) => {
+            #[test]
+            fn $name() {
+                let syntax = parse(quote!($input));
+                assert!(matches!(syntax[0].0, Syntax::Escape(_)));
+            }
+        };
+    }
+
     #[test]
     fn parse_empty() {
         assert!(parse(quote!()).is_empty());
@@ -612,6 +636,66 @@ mod tests {
     //fn parse_invalid_opcode() {
     //    parse(quote!(OP_CHECKSIG A B));
     //}
+
+    // Basic opcode tests
+    test_opcode!(parse_op_0, OP_0, OP_0);
+    test_opcode!(parse_op_false, FALSE, OP_FALSE);
+    test_opcode!(parse_op_true, TRUE, OP_TRUE);
+    test_opcode!(parse_op_checksig, OP_CHECKSIG, OP_CHECKSIG);
+    test_opcode!(parse_op_hash160, OP_HASH160, OP_HASH160);
+
+    // Test numeric opcodes
+    test_opcode!(parse_op_1, OP_1, OP_PUSHNUM_1);
+    test_opcode!(parse_op_2, OP_2, OP_PUSHNUM_2);
+    test_opcode!(parse_op_3, OP_3, OP_PUSHNUM_3);
+    test_opcode!(parse_op_16, OP_16, OP_PUSHNUM_16);
+
+    // Test aliases
+    test_opcode!(parse_checksig_no_prefix, CHECKSIG, OP_CHECKSIG);
+    test_opcode!(parse_hash160_no_prefix, HASH160, OP_HASH160);
+
+    // Test special cases
+    test_opcode!(parse_nop2, OP_NOP2, OP_CLTV);
+    test_opcode!(parse_nop3, OP_NOP3, OP_CSV);
+    test_opcode!(parse_debug, DEBUG, OP_RESERVED);
+
+    // Test invalid opcodes
+    test_invalid_opcode!(parse_invalid_opcode, INVALID_OPCODE);
+    test_invalid_opcode!(parse_unknown_identifier, UNKNOWN);
+
+    // Test complex scripts
+    #[test]
+    fn parse_complex_script() {
+        let syntax = parse(quote! {
+            OP_DUP OP_HASH160 0x14 0x89abcdef89abcdef89abcdef89abcdef89abcdef OP_EQUALVERIFY OP_CHECKSIG
+        });
+
+        assert_eq!(syntax.len(), 6);
+        assert!(matches!(syntax[0].0, Syntax::Opcode(OP_DUP)));
+        assert!(matches!(syntax[1].0, Syntax::Opcode(OP_HASH160)));
+        assert!(matches!(syntax[2].0, Syntax::Int(20))); // 0x14 = 20
+        assert!(matches!(syntax[3].0, Syntax::Bytes(_)));
+        assert!(matches!(syntax[4].0, Syntax::Opcode(OP_EQUALVERIFY)));
+        assert!(matches!(syntax[5].0, Syntax::Opcode(OP_CHECKSIG)));
+    }
+
+    #[test]
+    fn parse_p2pkh_script() {
+        let syntax = parse(quote! {
+            OP_DUP
+            OP_HASH160
+            <pubkey_hash>
+            OP_EQUALVERIFY
+            OP_CHECKSIG
+        });
+
+        assert_eq!(syntax.len(), 5);
+        assert!(matches!(syntax[0].0, Syntax::Opcode(OP_DUP)));
+        assert!(matches!(syntax[1].0, Syntax::Opcode(OP_HASH160)));
+        assert!(matches!(syntax[2].0, Syntax::Escape(_)));
+        assert!(matches!(syntax[3].0, Syntax::Opcode(OP_EQUALVERIFY)));
+        assert!(matches!(syntax[4].0, Syntax::Opcode(OP_CHECKSIG)));
+    }
 
     #[test]
     fn parse_opcodes() {
