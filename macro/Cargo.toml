@@ -1,0 +1,18 @@
+[package]
+name = "script-macro"
+version = "0.3.0"
+authors = ["Lukas George lukas@zerosync.org"]
+edition = "2021"
+description = "Inline Bitcoin scripts proc_macro"
+license = "MIT"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+bitcoin = "0.32.5"
+quote = "1.0.23"
+proc-macro-error = "1.0.4"
+lazy_static = "1.4.0"
+hex = "0.4.3"
+proc-macro2 = "1.0.51"

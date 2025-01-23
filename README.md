@@ -1,22 +1,14 @@
-# bitcoin-script
+# Bitvm Bitcoin Script
 
-[![Rust](https://github.com/mappum/rust-bitcoin-script/workflows/Rust/badge.svg)](https://github.com/mappum/rust-bitcoin-script/actions?query=workflow%3ARust)
-[![crates.io](https://img.shields.io/crates/v/bitcoin-script.svg)](https://crates.io/crates/bitcoin-script)
-[![docs.rs](https://docs.rs/bitcoin-script/badge.svg)](https://docs.rs/bitcoin-script)
-
-**Bitcoin scripts inline in Rust.**
-
----
+Utilities used in the official [BitVM](https://github.com/BitVM/BitVM) implementation to generate Bitcoin Script. Heavily inspired by [rust-bitcoin-script's inline macro](https://github.com/mappum/rust-bitcoin-script).
 
 ## Usage
 
-This crate exports a `script!` macro which can be used to build Bitcoin scripts. The macro returns the [`Script`](https://docs.rs/bitcoin/latest/bitcoin/struct.ScriptBuf.html) type from the [`bitcoin`](https://github.com/rust-bitcoin/rust-bitcoin) crate.
+This crate exports a `script!` macro which can be used to build structured Bitcoin scripts and compiled to the [`Script`](https://docs.rs/bitcoin/latest/bitcoin/struct.ScriptBuf.html) type from the [`bitcoin`](https://github.com/rust-bitcoin/rust-bitcoin) crate.
 
 **Example:**
 
 ```rust
-#![feature(proc_macro_hygiene)]
-
 use bitcoin_script::bitcoin_script;
 
 let htlc_script = script! {
@@ -28,6 +20,8 @@ let htlc_script = script! {
     OP_EQUALVERIFY
     OP_CHECKSIG
 };
+
+let script_buf = htlc_script.compile();
 ```
 
 ### Syntax
@@ -77,6 +71,7 @@ Rust expressions of the following types are supported:
 - [`bitcoin::PublicKey`](https://docs.rs/bitcoin/latest/bitcoin/struct.PublicKey.html)
 - [`bitcoin::XOnlyPublicKey`](https://docs.rs/bitcoin/latest/bitcoin/struct.XOnlyPublicKey.html)
 - [`bitcoin::ScriptBuf`](https://docs.rs/bitcoin/latest/bitcoin/struct.ScriptBuf.html)
+- `StructuredScript`
 
 ```rust
 let bytes = vec![1, 2, 3];
@@ -90,5 +85,22 @@ let script = script! {
 };
 ```
 
-### Optimality
-Obsolete Opcodes are automatically removed when using the `optimal_opcodes` branch. E.g. a sequence of `OP_0 OP_ROLL` will be optimized away.
+#### Conditional Scipt Generation
+
+For-loops and if-else-statements are supported inside the script and will be unrolled when the scripts are generated.
+
+```rust
+let loop_count = 10;
+
+let script = script! {
+    for i in 0..loop_count {
+        if i % 2 == 0 {
+            OP_ADD
+        } else {
+            OP_DUP
+            OP_ADD
+        }
+    }
+};
+
+```
