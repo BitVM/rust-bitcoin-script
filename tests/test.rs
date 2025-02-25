@@ -303,3 +303,24 @@ fn test_push_witness() {
         reference_script.compile().as_bytes()
     );
 }
+
+#[test]
+fn test_serialization() {
+    let script = script! {
+        // Example script
+        for i in 0..10 {
+            {i}
+            {i*2}
+            {i*4}
+            OP_ADD
+            OP_ADD
+        }
+    };
+
+    let binary_data = bincode::serialize(&script).unwrap();
+    println!("Script size: {} bytes", script.len());
+    println!("Binary size: {} bytes", binary_data.len());
+
+    let deserialized: Script = bincode::deserialize(&binary_data).unwrap();
+    assert_eq!(deserialized, script);
+}
