@@ -85,7 +85,7 @@ let script = script! {
 };
 ```
 
-#### Conditional Scipt Generation
+#### Conditional Script, Skipped Generation
 
 For-loops and if-else-statements are supported inside the script and will be unrolled when the scripts are generated.
 
