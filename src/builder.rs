@@ -149,26 +149,57 @@ impl StructuredScript {
         self
     }
 
-    // Compiles the builder to bytes using a cache that stores all called_script starting
-    // positions in script to copy them from script instead of recompiling.
-    fn compile_to_bytes(&self, script: &mut Vec<u8>, cache: &mut HashMap<u64, usize>) {
-        for block in self.blocks.as_slice() {
-            match block {
-                Block::Call(id) => {
-                    let called_script = self
-                        .script_map
-                        .get(id)
-                        .expect("Missing entry for a called script");
-                    // Check if the script with the hash id is in cache
-                    match cache.get(id) {
+    /// Compiles the script to bytes.
+    fn compile_to_bytes(&self) -> Vec<u8> {
+        #[derive(Debug)]
+        enum Task<'a> {
+            CompileCall {
+                id: u64,
+                called_script: &'a StructuredScript,
+            },
+            PushRaw(&'a ScriptBuf),
+            UpdateCache {
+                id: u64,
+                called_script_start: usize,
+            },
+        }
+
+        fn push_script<'a>(script: &'a StructuredScript, tasks: &mut Vec<Task<'a>>) {
+            for block in script.blocks.iter().rev() {
+                match block {
+                    Block::Call(id) => {
+                        let called_script = script
+                            .script_map
+                            .get(id)
+                            .expect("missing entry for called script");
+                        tasks.push(Task::CompileCall {
+                            id: *id,
+                            called_script,
+                        });
+                    }
+                    Block::Script(buffer) => tasks.push(Task::PushRaw(buffer)),
+                }
+            }
+        }
+
+        let mut tasks = Vec::new();
+        let mut cache = HashMap::new();
+        let mut script: Vec<u8> = Vec::with_capacity(self.size);
+        push_script(self, &mut tasks);
+
+        while let Some(task) = tasks.pop() {
+            match task {
+                Task::CompileCall { id, called_script } => {
+                    match cache.get(&id) {
                         Some(called_start) => {
                             // Copy the already compiled called_script from the position it was
                             // inserted in the compiled script.
                             let start = script.len();
                             let end = start + called_script.len();
+                            // TODO: Check if assertion is always true due to code invariants
                             assert!(
                                 end <= script.capacity(),
-                                "Not enough capacity allocated for compilated script"
+                                "Not enough capacity allocated for compiled script"
                             );
                             unsafe {
                                 script.set_len(end);
@@ -184,21 +215,22 @@ impl StructuredScript {
                             }
                         }
                         None => {
-                            // Compile the called_script the first time and add its starting
-                            // position in the compiled script to the cache.
-                            let called_script_start = script.len();
-                            called_script.compile_to_bytes(script, cache);
-                            cache.insert(*id, called_script_start);
+                            tasks.push(Task::UpdateCache {
+                                id,
+                                called_script_start: script.len(),
+                            });
+                            push_script(called_script, &mut tasks);
                         }
                     }
                 }
-                Block::Script(block_script) => {
-                    let source_script = block_script.as_bytes();
+                Task::PushRaw(buffer) => {
+                    let source_script = buffer.as_bytes();
                     let start = script.len();
                     let end = start + source_script.len();
+                    // TODO: Check if assertion is always true due to code invariants
                     assert!(
                         end <= script.capacity(),
-                        "Not enough capacity allocated for compilated script"
+                        "Not enough capacity allocated for compiled script"
                     );
                     unsafe {
                         script.set_len(end);
@@ -209,14 +241,20 @@ impl StructuredScript {
                         std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, source_script.len());
                     }
                 }
+                Task::UpdateCache {
+                    id,
+                    called_script_start,
+                } => {
+                    cache.insert(id, called_script_start);
+                }
             }
         }
+
+        script
     }
 
     pub fn compile(self) -> ScriptBuf {
-        let mut script = Vec::with_capacity(self.size);
-        let mut cache = HashMap::new();
-        self.compile_to_bytes(&mut script, &mut cache);
+        let script = self.compile_to_bytes();
         // Ensure that the builder has minimal opcodes:
         let script_buf = ScriptBuf::from_bytes(script);
         let mut instructions_iter = script_buf.instructions();
