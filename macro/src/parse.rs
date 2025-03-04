@@ -355,9 +355,7 @@ pub fn parse(tokens: TokenStream) -> Vec<(Syntax, Span)> {
             // Wrap if-else statements such that they return a Vec<ScriptBuf>
             (Ident(_), "if") => parse_if(token, &mut tokens),
             // Replace DEBUG with OP_RESERVED
-            (Ident(_), "DEBUG") => {
-                (Syntax::Opcode(OP_RESERVED), token.span())
-            }
+            (Ident(_), "DEBUG") => (Syntax::Opcode(OP_RESERVED), token.span()),
 
             // identifier, look up opcode
             (Ident(_), _) => match parse_opcode(&token_str) {
