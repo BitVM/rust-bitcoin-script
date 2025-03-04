@@ -3,12 +3,15 @@ use bitcoin::blockdata::script::{Instruction, PushBytes, PushBytesBuf, ScriptBuf
 use bitcoin::opcodes::{OP_0, OP_TRUE};
 use bitcoin::script::write_scriptint;
 use bitcoin::Witness;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-#[derive(Clone, Debug, Hash, Serialize, Deserialize, PartialEq)]
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, Hash, PartialEq)]
 pub enum Block {
     Call(u64),
     Script(ScriptBuf),
@@ -21,7 +24,8 @@ impl Block {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq)]
 pub struct StructuredScript {
     size: usize,
     pub debug_identifier: String,

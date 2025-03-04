@@ -304,6 +304,7 @@ fn test_push_witness() {
     );
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn test_serialization() {
     let script = script! {
