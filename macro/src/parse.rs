@@ -1,3 +1,4 @@
+use bitcoin::hex::FromHex;
 use bitcoin::{
     blockdata::opcodes::Opcode,
     opcodes::{all::*, OP_0, OP_FALSE, OP_NOP2, OP_NOP3, OP_TRUE},
@@ -541,7 +542,7 @@ fn parse_data(token: TokenTree) -> (Syntax, Span) {
 
 fn parse_bytes(token: TokenTree) -> (Syntax, Span) {
     let hex_bytes = &token.to_string()[2..];
-    let bytes = hex::decode(hex_bytes).unwrap_or_else(|err| {
+    let bytes = Vec::<u8>::from_hex(hex_bytes).unwrap_or_else(|err| {
         emit_error!(token.span(), "invalid hex literal ({})", err);
     });
     (Syntax::Bytes(bytes), token.span())
