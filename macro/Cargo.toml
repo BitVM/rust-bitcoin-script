@@ -1,6 +1,6 @@
 [package]
 name = "script-macro"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Lukas George lukas@zerosync.org"]
 edition = "2021"
 description = "Inline Bitcoin scripts proc_macro"
