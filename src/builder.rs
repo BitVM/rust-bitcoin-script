@@ -3,12 +3,15 @@ use bitcoin::blockdata::script::{Instruction, PushBytes, PushBytesBuf, ScriptBuf
 use bitcoin::opcodes::{OP_0, OP_TRUE};
 use bitcoin::script::write_scriptint;
 use bitcoin::Witness;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-#[derive(Clone, Debug, Hash, Serialize, Deserialize, PartialEq)]
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, Hash, PartialEq)]
 pub enum Block {
     Call(u64),
     Script(ScriptBuf),
@@ -21,7 +24,8 @@ impl Block {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq)]
 pub struct StructuredScript {
     size: usize,
     pub debug_identifier: String,
@@ -43,13 +47,16 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 
 impl StructuredScript {
     pub fn new(debug_info: &str) -> Self {
-        let blocks = Vec::new();
         StructuredScript {
             size: 0,
             debug_identifier: debug_info.to_string(),
-            blocks,
+            blocks: Vec::new(),
             script_map: HashMap::new(),
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.size == 0
     }
 
     pub fn len(&self) -> usize {
@@ -63,7 +70,7 @@ impl StructuredScript {
     pub fn get_structured_script(&self, id: &u64) -> &StructuredScript {
         self.script_map
             .get(id)
-            .expect(&format!("script id: {} not found in script_map.", id))
+            .unwrap_or_else(|| panic!("script id: {} not found in script_map.", id))
     }
 
     // Return the debug information of the Opcode at position
@@ -133,10 +140,10 @@ impl StructuredScript {
     }
 
     pub fn push_env_script(mut self, mut data: StructuredScript) -> StructuredScript {
-        if data.len() == 0 {
+        if data.is_empty() {
             return self;
         }
-        if self.len() == 0 {
+        if self.is_empty() {
             return data;
         }
 
@@ -342,8 +349,7 @@ impl NotU8Pushable for u32 {
 }
 impl NotU8Pushable for usize {
     fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
-        builder
-            .push_int(i64::try_from(self).unwrap_or_else(|_| panic!("Usize does not fit in i64")))
+        builder.push_int(i64::try_from(self).expect("Usize does not fit in i64"))
     }
 }
 impl NotU8Pushable for Vec<u8> {
