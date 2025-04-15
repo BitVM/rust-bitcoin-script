@@ -3,12 +3,38 @@ use bitcoin::blockdata::script::{Instruction, PushBytes, PushBytesBuf, ScriptBuf
 use bitcoin::opcodes::{OP_0, OP_TRUE};
 use bitcoin::script::write_scriptint;
 use bitcoin::Witness;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::rc::Rc;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+thread_local! {
+    static SCRIPT_MAP: RefCell<HashMap<u64, Rc<StructuredScript>>> =
+        RefCell::new(HashMap::new());
+}
+
+pub(crate) fn thread_add_script(id: u64, script: StructuredScript) {
+    SCRIPT_MAP.with(|script_map| {
+        script_map
+            .borrow_mut()
+            .entry(id)
+            .or_insert_with(|| Rc::new(script));
+    });
+}
+
+pub(crate) fn thread_get_script(id: &u64) -> Rc<StructuredScript> {
+    SCRIPT_MAP.with(|script_map| {
+        script_map
+            .borrow()
+            .get(id)
+            .expect("script id not found in SCRIPT_MAP")
+            .clone()
+    })
+}
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, Hash, PartialEq)]
@@ -30,7 +56,6 @@ pub struct StructuredScript {
     size: usize,
     pub debug_identifier: String,
     pub blocks: Vec<Block>, //List?
-    script_map: HashMap<u64, StructuredScript>,
 }
 
 impl Hash for StructuredScript {
@@ -51,7 +76,6 @@ impl StructuredScript {
             size: 0,
             debug_identifier: debug_info.to_string(),
             blocks: Vec::new(),
-            script_map: HashMap::new(),
         }
     }
 
@@ -64,13 +88,11 @@ impl StructuredScript {
     }
 
     pub fn add_structured_script(&mut self, id: u64, script: StructuredScript) {
-        self.script_map.entry(id).or_insert(script);
+        thread_add_script(id, script);
     }
 
-    pub fn get_structured_script(&self, id: &u64) -> &StructuredScript {
-        self.script_map
-            .get(id)
-            .unwrap_or_else(|| panic!("script id: {} not found in script_map.", id))
+    pub fn get_structured_script(&self, id: &u64) -> Rc<StructuredScript> {
+        thread_get_script(id)
     }
 
     // Return the debug information of the Opcode at position
@@ -80,11 +102,7 @@ impl StructuredScript {
             assert!(current_pos <= position, "Target position not found");
             match block {
                 Block::Call(id) => {
-                    //let called_script = self.get_structured_script(id);
-                    let called_script = self
-                        .script_map
-                        .get(id)
-                        .expect("Missing entry for a called script");
+                    let called_script = self.get_structured_script(id);
                     if position >= current_pos && position < current_pos + called_script.len() {
                         return called_script.debug_info(position - current_pos);
                     }
@@ -159,32 +177,29 @@ impl StructuredScript {
     /// Compiles the script to bytes.
     fn compile_to_bytes(&self) -> Vec<u8> {
         #[derive(Debug)]
-        enum Task<'a> {
+        enum Task {
             CompileCall {
                 id: u64,
-                called_script: &'a StructuredScript,
+                called_script: Rc<StructuredScript>,
             },
-            PushRaw(&'a ScriptBuf),
+            PushRaw(ScriptBuf),
             UpdateCache {
                 id: u64,
                 called_script_start: usize,
             },
         }
 
-        fn push_script<'a>(script: &'a StructuredScript, tasks: &mut Vec<Task<'a>>) {
+        fn push_script(script: Rc<StructuredScript>, tasks: &mut Vec<Task>) {
             for block in script.blocks.iter().rev() {
                 match block {
                     Block::Call(id) => {
-                        let called_script = script
-                            .script_map
-                            .get(id)
-                            .expect("missing entry for called script");
+                        let called_script = script.get_structured_script(id);
                         tasks.push(Task::CompileCall {
                             id: *id,
                             called_script,
                         });
                     }
-                    Block::Script(buffer) => tasks.push(Task::PushRaw(buffer)),
+                    Block::Script(buffer) => tasks.push(Task::PushRaw(buffer.clone())),
                 }
             }
         }
@@ -192,7 +207,7 @@ impl StructuredScript {
         let mut tasks = Vec::new();
         let mut cache = HashMap::new();
         let mut script: Vec<u8> = Vec::with_capacity(self.size);
-        push_script(self, &mut tasks);
+        push_script(Rc::new(self.clone()), &mut tasks);
 
         while let Some(task) = tasks.pop() {
             match task {
