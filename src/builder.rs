@@ -398,6 +398,12 @@ impl<T: NotU8Pushable> NotU8Pushable for Vec<T> {
         builder
     }
 }
+impl NotU8Pushable for ScriptBuf {
+    fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
+        builder.push_script(self)
+    }
+}
+
 pub trait Pushable {
     fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript;
 }

@@ -304,6 +304,17 @@ fn test_push_witness() {
     );
 }
 
+#[test]
+fn test_push_scriptbuf() {
+    let script_buf = script! {
+        { 1 }
+    }.compile();
+    let script = script! {
+        { script_buf.clone() }
+    };
+    assert_eq!(script_buf, script.compile());
+}
+
 #[cfg(feature = "serde")]
 #[test]
 fn test_serialization() {
