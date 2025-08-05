@@ -1,11 +1,17 @@
 use bitcoin::blockdata::opcodes::Opcode;
-use bitcoin::blockdata::script::{Instruction, PushBytes, PushBytesBuf, ScriptBuf};
+
+#[cfg(not(feature = "unstructured"))]
+use bitcoin::blockdata::script::Instruction;
+use bitcoin::blockdata::script::{PushBytes, PushBytesBuf, ScriptBuf};
 use bitcoin::opcodes::{OP_0, OP_TRUE};
 use bitcoin::script::write_scriptint;
 use bitcoin::Witness;
+#[cfg(not(feature = "unstructured"))]
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::hash::Hash;
+#[cfg(not(feature = "unstructured"))]
+use std::hash::{DefaultHasher, Hasher};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -18,12 +24,14 @@ pub enum Block {
 }
 
 impl Block {
+    #[cfg(not(feature = "unstructured"))]
     fn new_script() -> Self {
         let buf = ScriptBuf::new();
         Block::Script(buf)
     }
 }
 
+#[cfg(not(feature = "unstructured"))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct StructuredScript {
@@ -33,18 +41,27 @@ pub struct StructuredScript {
     script_map: HashMap<u64, StructuredScript>,
 }
 
+#[cfg(feature = "unstructured")]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "unstructured", derive(Hash))]
+#[derive(Clone, Debug, PartialEq)]
+pub struct StructuredScript(ScriptBuf);
+
+#[cfg(not(feature = "unstructured"))]
 impl Hash for StructuredScript {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.blocks.hash(state);
     }
 }
 
+#[cfg(not(feature = "unstructured"))]
 fn calculate_hash<T: Hash>(t: &T) -> u64 {
     let mut hasher = DefaultHasher::new();
     t.hash(&mut hasher);
     hasher.finish()
 }
 
+#[cfg(not(feature = "unstructured"))]
 impl StructuredScript {
     pub fn new(debug_info: &str) -> Self {
         StructuredScript {
@@ -280,6 +297,60 @@ impl StructuredScript {
         script_buf
     }
 
+    pub fn push_slice<T: AsRef<PushBytes>>(mut self, data: T) -> StructuredScript {
+        let script = self.get_script_block();
+        let old_size = script.len();
+        script.push_slice(data);
+        self.size += script.len() - old_size;
+        self
+    }
+}
+
+#[cfg(feature = "unstructured")]
+impl StructuredScript {
+    pub fn new(_: &str) -> Self {
+        Self(ScriptBuf::new())
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn push_opcode(mut self, data: Opcode) -> StructuredScript {
+        self.0.push_opcode(data);
+        self
+    }
+
+    pub fn push_slice<T: AsRef<PushBytes>>(mut self, data: T) -> StructuredScript {
+        self.0.push_slice(data);
+        self
+    }
+
+    pub fn push_script(self, data: ScriptBuf) -> StructuredScript {
+        let mut inner = self.0.into_bytes();
+        inner.append(&mut data.into_bytes());
+
+        Self(ScriptBuf::from_bytes(inner))
+    }
+    pub fn push_env_script(self, data: StructuredScript) -> StructuredScript {
+        self.push_script(data.0)
+    }
+
+    pub fn compile(self) -> ScriptBuf {
+        #[cfg(not(feature = "unchecked"))]
+        if self.0.instructions_minimal().any(|x| x.is_err()) {
+            panic!("Script contains invalid instructions");
+        }
+
+        self.0
+    }
+}
+
+impl StructuredScript {
     pub fn push_int(self, data: i64) -> StructuredScript {
         // We can special-case -1, 1-16
         if data == -1 || (1..=16).contains(&data) {
@@ -294,19 +365,6 @@ impl StructuredScript {
         else {
             self.push_int_non_minimal(data)
         }
-    }
-    fn push_int_non_minimal(self, data: i64) -> StructuredScript {
-        let mut buf = [0u8; 8];
-        let len = write_scriptint(&mut buf, data);
-        self.push_slice(&<&PushBytes>::from(&buf)[..len])
-    }
-
-    pub fn push_slice<T: AsRef<PushBytes>>(mut self, data: T) -> StructuredScript {
-        let script = self.get_script_block();
-        let old_size = script.len();
-        script.push_slice(data);
-        self.size += script.len() - old_size;
-        self
     }
 
     pub fn push_key(self, key: &::bitcoin::PublicKey) -> StructuredScript {
@@ -323,6 +381,12 @@ impl StructuredScript {
 
     pub fn push_expression<T: Pushable>(self, expression: T) -> StructuredScript {
         expression.bitcoin_script_push(self)
+    }
+
+    fn push_int_non_minimal(self, data: i64) -> StructuredScript {
+        let mut buf = [0u8; 8];
+        let len = write_scriptint(&mut buf, data);
+        self.push_slice(&<&PushBytes>::from(&buf)[..len])
     }
 }
 
