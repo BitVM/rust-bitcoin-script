@@ -354,12 +354,7 @@ impl NotU8Pushable for usize {
 }
 impl NotU8Pushable for Vec<u8> {
     fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
-        // Push the element with a minimal opcode if it is a single number.
-        if self.len() == 1 {
-            builder.push_int(self[0].into())
-        } else {
-            builder.push_slice(PushBytesBuf::try_from(self.to_vec()).unwrap())
-        }
+        builder.push_slice(PushBytesBuf::try_from(self.to_vec()).unwrap())
     }
 }
 impl NotU8Pushable for ::bitcoin::PublicKey {
@@ -375,12 +370,7 @@ impl NotU8Pushable for ::bitcoin::XOnlyPublicKey {
 impl NotU8Pushable for Witness {
     fn bitcoin_script_push(self, mut builder: StructuredScript) -> StructuredScript {
         for element in self.into_iter() {
-            // Push the element with a minimal opcode if it is a single number.
-            if element.len() == 1 {
-                builder = builder.push_int(element[0].into());
-            } else {
-                builder = builder.push_slice(PushBytesBuf::try_from(element.to_vec()).unwrap());
-            }
+            builder = builder.push_slice(PushBytesBuf::try_from(element.to_vec()).unwrap());
         }
         builder
     }
