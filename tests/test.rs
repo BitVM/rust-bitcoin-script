@@ -260,20 +260,36 @@ fn test_non_optimal_opcodes() {
 #[test]
 fn test_push_witness() {
     for i in 0..512 {
-        let mut witness = Witness::new();
-        let vec = vec![129u8; i];
-        witness.push(vec.clone());
-        let script = script! {
-            { witness }
-        };
-        let reference_script = script! {
-            { vec }
-        };
-        assert_eq!(
-            script.compile().as_bytes(),
-            reference_script.compile().as_bytes(),
-            "here"
-        );
+        for x in vec![0, 37, 42, 127, 128, 129, 211, 255] {
+            let mut witness = Witness::new();
+            let vec = vec![x; i];
+            witness.push(vec.clone());
+            let script = script! {
+                { witness }
+            };
+            let reference_script = script! {
+                { vec }
+            };
+            assert_eq!(
+                script.clone().compile().as_bytes(),
+                reference_script.compile().as_bytes(),
+                "here"
+            );
+            if i == 1 && x != 128 {
+                let other_reference_script = script! {
+                    if x > 128 {
+                        { 128i32 - x as i32 }
+                    } else {
+                        { x }
+                    }
+                };
+                assert_eq!(
+                    script.compile().as_bytes(),
+                    other_reference_script.compile().as_bytes(),
+                    "here"
+                );
+            }
+        }
     }
 
     let mut witness = Witness::new();
