@@ -354,14 +354,18 @@ impl NotU8Pushable for usize {
 }
 impl NotU8Pushable for Vec<u8> {
     fn bitcoin_script_push(self, builder: StructuredScript) -> StructuredScript {
-        if self.len() == 1 && self[0] != 128 {
-            if self[0] < 128 {
-                builder.push_int(self[0].into())
-            } else {
-                builder.push_int((128i16 - self[0] as i16).into())
+        match self[..] {
+            [x] if (1..=16).contains(&x) => {
+                // use decicated opcode for pushing a single byte with value 1 <= x <= 16.
+                // Note that we don't use a special opcode used for pushing the value 0 - pushing this
+                // as an integer would push an empty array rather than a 0x00 value
+                builder.push_int(x.into())
             }
-        } else {
-            builder.push_slice(PushBytesBuf::try_from(self.to_vec()).unwrap())
+            [129] => {
+                // 129 is equivalent to -1 when interpreting as signed - use dedicated opcode for pushing this
+                builder.push_int(-1)
+            }
+            _ => builder.push_slice(PushBytesBuf::try_from(self).unwrap()),
         }
     }
 }
@@ -378,14 +382,20 @@ impl NotU8Pushable for ::bitcoin::XOnlyPublicKey {
 impl NotU8Pushable for Witness {
     fn bitcoin_script_push(self, mut builder: StructuredScript) -> StructuredScript {
         for element in self.into_iter() {
-            if element.len() == 1 && element[0] != 128 {
-                if element[0] < 128 {
-                    builder = builder.push_int(element[0].into());
-                } else {
-                    builder = builder.push_int((128i16 - element[0] as i16) as i64);
+            match element[..] {
+                [x] if (1..=16).contains(&x) => {
+                    // use decicated opcode for pushing a single byte with value 1 <= x <= 16.
+                    // Note that we don't use a special opcode used for pushing the value 0 - pushing this
+                    // as an integer would push an empty array rather than a 0x00 value
+                    builder = builder.push_int(x.into());
                 }
-            } else {
-                builder = builder.push_slice(PushBytesBuf::try_from(element.to_vec()).unwrap());
+                [129] => {
+                    // 129 is equivalent to -1 when interpreting as signed - use dedicated opcode for pushing this
+                    builder = builder.push_int(-1);
+                }
+                _ => {
+                    builder = builder.push_slice(PushBytesBuf::try_from(element.to_vec()).unwrap());
+                }
             }
         }
         builder

@@ -271,29 +271,16 @@ fn test_push_witness() {
                 { vec }
             };
             assert_eq!(
-                script.clone().compile().as_bytes(),
+                script.compile().as_bytes(),
                 reference_script.compile().as_bytes(),
                 "here"
             );
-            if i == 1 && x != 128 {
-                let other_reference_script = script! {
-                    if x > 128 {
-                        { 128i32 - x as i32 }
-                    } else {
-                        { x }
-                    }
-                };
-                assert_eq!(
-                    script.compile().as_bytes(),
-                    other_reference_script.compile().as_bytes(),
-                    "here"
-                );
-            }
         }
     }
 
     let mut witness = Witness::new();
-    for i in 0..16 {
+    witness.push([]); //presentation of 0 with `consensus_encode` is [0] instead of [], but `push_int` in this repository encodes 0 as []
+    for i in 1..16 {
         let mut varint = Vec::new();
         encode::VarInt(i).consensus_encode(&mut varint).unwrap();
         witness.push(varint);
@@ -324,7 +311,8 @@ fn test_push_witness() {
 fn test_push_scriptbuf() {
     let script_buf = script! {
         { 1 }
-    }.compile();
+    }
+    .compile();
     let script = script! {
         { script_buf.clone() }
     };
