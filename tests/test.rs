@@ -260,24 +260,27 @@ fn test_non_optimal_opcodes() {
 #[test]
 fn test_push_witness() {
     for i in 0..512 {
-        let mut witness = Witness::new();
-        let vec = vec![129u8; i];
-        witness.push(vec.clone());
-        let script = script! {
-            { witness }
-        };
-        let reference_script = script! {
-            { vec }
-        };
-        assert_eq!(
-            script.compile().as_bytes(),
-            reference_script.compile().as_bytes(),
-            "here"
-        );
+        for x in vec![0, 37, 42, 127, 128, 129, 211, 255] {
+            let mut witness = Witness::new();
+            let vec = vec![x; i];
+            witness.push(vec.clone());
+            let script = script! {
+                { witness }
+            };
+            let reference_script = script! {
+                { vec }
+            };
+            assert_eq!(
+                script.compile().as_bytes(),
+                reference_script.compile().as_bytes(),
+                "here"
+            );
+        }
     }
 
     let mut witness = Witness::new();
-    for i in 0..16 {
+    witness.push([]); //presentation of 0 with `consensus_encode` is [0] instead of [], but `push_int` in this repository encodes 0 as []
+    for i in 1..16 {
         let mut varint = Vec::new();
         encode::VarInt(i).consensus_encode(&mut varint).unwrap();
         witness.push(varint);
@@ -308,7 +311,8 @@ fn test_push_witness() {
 fn test_push_scriptbuf() {
     let script_buf = script! {
         { 1 }
-    }.compile();
+    }
+    .compile();
     let script = script! {
         { script_buf.clone() }
     };
