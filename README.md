@@ -30,9 +30,19 @@ Compilation preserves the generated instruction stream by default. Optimizing
 is explicit, so callers can inspect or test the script exactly as generated
 before choosing to rewrite it.
 
-Use `compile_optimized()` for the convenient form, or
-`compile_with_options(CompileOptions::ALL)` when compilation options are passed
-through another API:
+There are three compilation entry points:
+
+- `compile()` compiles with `CompileOptions::NONE` and performs no optimizer
+  rewrites.
+- `compile_optimized()` is a convenience method that compiles with
+  `CompileOptions::ALL`.
+- `compile_with_options(options)` accepts the compilation configuration
+  explicitly. This is useful for code that chooses its optimization policy at
+  runtime or passes configuration through another API.
+
+`CompileOptions::ALL` is an associated constant containing the configuration
+that enables every implemented optimizer pass. It is not an additional mode
+beyond `compile_optimized()`; the following two calls are equivalent:
 
 ```rust
 use bitcoin_script::{script, CompileOptions};
@@ -46,13 +56,28 @@ let script = script! {
     OP_VERIFY
 };
 
-let unoptimized = script.clone().compile();
 let optimized = script.clone().compile_optimized();
 let same = script.compile_with_options(CompileOptions::ALL);
 
 assert_eq!(optimized, same);
-assert!(optimized.len() < unoptimized.len());
 ```
+
+The equivalent method definitions are conceptually:
+
+```rust,ignore
+fn compile(self) -> ScriptBuf {
+    self.compile_with_options(CompileOptions::NONE)
+}
+
+fn compile_optimized(self) -> ScriptBuf {
+    self.compile_with_options(CompileOptions::ALL)
+}
+```
+
+At present, `CompileOptions` contains one setting, `optimization`, whose value
+is either `OptimizationLevel::None` or `OptimizationLevel::All`. The options
+type leaves room for additional compilation settings without adding another
+compile method for each combination.
 
 `CompileOptions::ALL` runs the optimizer to a fixpoint and includes:
 
