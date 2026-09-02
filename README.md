@@ -82,11 +82,18 @@ compile method for each combination.
 `CompileOptions::ALL` runs the optimizer to a fixpoint and includes:
 
 - direct opcode substitutions such as `1 ADD -> 1ADD` and `2 ROLL -> ROT`;
-- symbolic stack rewrites, including multi-item and alt-stack cancellations;
+- dynamic-programming stack superoptimization across longer main/alt-stack sequences;
+- repeated-literal rematerialization such as `C C C -> C DUP DUP`;
 - `VERIFY` and hash fusion;
-- dead-result, commutativity, boolean, and comparison simplifications;
-- constant folding for arithmetic, comparisons, hashes, `SIZE`, and branches;
+- typed dead-result, arithmetic, boolean-threshold, and comparison simplifications;
+- constant folding for arithmetic, `MIN`/`MAX` chains, hashes, `SIZE`, and branches;
+- control-flow dataflow that retains numeric and boolean facts across branch joins;
 - locktime/sequence cleanup, common branch-tail hoisting, and `NOP` removal.
+
+Repeated literals are costed by their serialized push size. If `push(C)` takes
+more than one byte, `C C` becomes `C DUP`; longer runs reuse the same pushed
+value with additional `DUP` opcodes. The optimized result is kept only when
+the complete fixpoint is strictly smaller than the original script.
 
 The optimizer targets Tapscript semantics. Rewrites that can alter stack
 underflow or numeric parsing are applied only when prefix analysis proves their
@@ -95,8 +102,10 @@ unchanged, and the disabled `CHECKMULTISIG` opcodes are never introduced or
 fused.
 
 Optimization changes the serialized script and can remove transient resource
-usage. Generate signatures, Tapleaf hashes, and byte-level test vectors from
-the final optimized `ScriptBuf`, not from the unoptimized script.
+usage. In particular, do not use it to preserve a deliberate failure at the
+1,000-item combined-stack boundary. Generate signatures, Tapleaf hashes, and
+byte-level test vectors from the final optimized `ScriptBuf`, not from the
+unoptimized script.
 
 ### Syntax
 
