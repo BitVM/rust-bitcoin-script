@@ -9,7 +9,7 @@ This crate exports a `script!` macro which can be used to build structured Bitco
 **Example:**
 
 ```rust
-use bitcoin_script::bitcoin_script;
+use bitcoin_script::script;
 
 let htlc_script = script! {
     OP_IF
@@ -23,6 +23,55 @@ let htlc_script = script! {
 
 let script_buf = htlc_script.compile();
 ```
+
+### Optimization
+
+Compilation preserves the generated instruction stream by default. Optimizing
+is explicit, so callers can inspect or test the script exactly as generated
+before choosing to rewrite it.
+
+Use `compile_optimized()` for the convenient form, or
+`compile_with_options(CompileOptions::ALL)` when compilation options are passed
+through another API:
+
+```rust
+use bitcoin_script::{script, CompileOptions};
+
+let script = script! {
+    OP_DUP
+    OP_SHA256
+    OP_SWAP
+    OP_SHA256
+    OP_EQUAL
+    OP_VERIFY
+};
+
+let unoptimized = script.clone().compile();
+let optimized = script.clone().compile_optimized();
+let same = script.compile_with_options(CompileOptions::ALL);
+
+assert_eq!(optimized, same);
+assert!(optimized.len() < unoptimized.len());
+```
+
+`CompileOptions::ALL` runs the optimizer to a fixpoint and includes:
+
+- direct opcode substitutions such as `1 ADD -> 1ADD` and `2 ROLL -> ROT`;
+- symbolic stack rewrites, including multi-item and alt-stack cancellations;
+- `VERIFY` and hash fusion;
+- dead-result, commutativity, boolean, and comparison simplifications;
+- constant folding for arithmetic, comparisons, hashes, `SIZE`, and branches;
+- locktime/sequence cleanup, common branch-tail hoisting, and `NOP` removal.
+
+The optimizer targets Tapscript semantics. Rewrites that can alter stack
+underflow or numeric parsing are applied only when prefix analysis proves their
+preconditions. A script containing any BIP342 `OP_SUCCESSx` opcode is returned
+unchanged, and the disabled `CHECKMULTISIG` opcodes are never introduced or
+fused.
+
+Optimization changes the serialized script and can remove transient resource
+usage. Generate signatures, Tapleaf hashes, and byte-level test vectors from
+the final optimized `ScriptBuf`, not from the unoptimized script.
 
 ### Syntax
 
@@ -85,7 +134,7 @@ let script = script! {
 };
 ```
 
-#### Conditional Scipt Generation
+#### Conditional Script Generation
 
 For-loops and if-else-statements are supported inside the script and will be unrolled when the scripts are generated.
 

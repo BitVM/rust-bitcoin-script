@@ -3,7 +3,7 @@ use bitcoin::{
     opcodes::all::OP_ADD,
     Witness,
 };
-use bitcoin_script::{script, Script};
+use bitcoin_script::{script, CompileOptions, Script};
 
 #[test]
 fn test_generic() {
@@ -99,7 +99,6 @@ fn test_simple_loop() {
 }
 
 #[test]
-#[should_panic] // Optimization is not yet implemented.
 fn test_for_loop_optimized() {
     let script = script! {
         for i in 0..3 {
@@ -115,12 +114,26 @@ fn test_for_loop_optimized() {
     };
 
     assert_eq!(
-        script.compile().to_bytes(),
+        script.compile_optimized().to_bytes(),
         vec![
-            147, 147, 124, 0, 0, 147, 147, 124, 0, 139, 147, 124, 0, 82, 147, 147, 124, 81, 0, 147,
-            147, 124, 81, 139, 147, 124, 81, 82, 147, 147, 124, 82, 0, 147, 147, 124, 82, 139, 147,
-            124, 82, 82, 147
+            147, 147, 124, 0, 147, 124, 139, 124, 82, 147, 124, 139, 124, 82, 147, 124, 83, 147,
+            124, 82, 147, 124, 83, 147, 124, 84
         ]
+    );
+}
+
+#[test]
+fn test_optimization_is_opt_in() {
+    let script = script! {
+        OP_1
+        OP_ADD
+    };
+
+    assert_eq!(script.clone().compile().to_bytes(), vec![81, 147]);
+    assert_eq!(script.clone().compile_optimized().to_bytes(), vec![139]);
+    assert_eq!(
+        script.compile_with_options(CompileOptions::ALL).to_bytes(),
+        vec![139]
     );
 }
 

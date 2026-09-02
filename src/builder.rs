@@ -10,6 +10,41 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+/// Controls how a [`StructuredScript`] is compiled.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompileOptions {
+    /// The set of optimizer passes to run after flattening the structured script.
+    pub optimization: OptimizationLevel,
+}
+
+impl CompileOptions {
+    /// Compile without rewriting the generated Bitcoin Script.
+    pub const NONE: Self = Self {
+        optimization: OptimizationLevel::None,
+    };
+
+    /// Apply every Tapscript optimization implemented by this crate.
+    pub const ALL: Self = Self {
+        optimization: OptimizationLevel::All,
+    };
+}
+
+impl Default for CompileOptions {
+    fn default() -> Self {
+        Self::NONE
+    }
+}
+
+/// Selects the optimizer pass set used during compilation.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum OptimizationLevel {
+    /// Preserve the generated instruction stream exactly.
+    #[default]
+    None,
+    /// Apply all Tapscript-safe peephole, stack, constant, and control-flow passes.
+    All,
+}
+
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, Hash, PartialEq)]
 pub enum Block {
@@ -260,12 +295,25 @@ impl StructuredScript {
         script
     }
 
+    /// Compile without applying optimizer rewrites.
     pub fn compile(self) -> ScriptBuf {
-        let script = self.compile_to_bytes();
-        // Ensure that the builder has minimal opcodes:
-        let script_buf = ScriptBuf::from_bytes(script);
-        let mut instructions_iter = script_buf.instructions();
-        for result in script_buf.instructions_minimal() {
+        self.compile_with_options(CompileOptions::NONE)
+    }
+
+    /// Compile while applying every optimization implemented by this crate.
+    pub fn compile_optimized(self) -> ScriptBuf {
+        self.compile_with_options(CompileOptions::ALL)
+    }
+
+    /// Compile using the requested optimization options.
+    pub fn compile_with_options(self, options: CompileOptions) -> ScriptBuf {
+        let bytes = self.compile_to_bytes();
+        let raw = ScriptBuf::from_bytes(bytes);
+
+        // Validate before optimizing so an embedded non-minimal ScriptBuf is not
+        // silently canonicalized by the flatten/assemble round trip.
+        let mut instructions_iter = raw.instructions();
+        for result in raw.instructions_minimal() {
             let instruction = instructions_iter.next();
             match result {
                 Ok(_) => (),
@@ -277,7 +325,15 @@ impl StructuredScript {
                 }
             }
         }
-        script_buf
+
+        match options.optimization {
+            OptimizationLevel::None => raw,
+            OptimizationLevel::All => {
+                let instrs = crate::optimizer::flatten_script(&raw);
+                let optimized = crate::optimizer::optimize_instructions(instrs);
+                crate::optimizer::assemble_script(&optimized)
+            }
+        }
     }
 
     pub fn push_int(self, data: i64) -> StructuredScript {
