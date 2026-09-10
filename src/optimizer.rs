@@ -735,6 +735,7 @@ fn apply_local_rules(instructions: &[OwnedInstruction]) -> Vec<OwnedInstruction>
     let facts = analyze_prefixes(instructions);
     let mut out = Vec::with_capacity(instructions.len());
     let mut index = 0;
+    let mut unchanged_stack_run_end = 0;
 
     while index < instructions.len() {
         // Re-materialize a repeated literal with DUP. Unlike most rules that
@@ -1006,10 +1007,21 @@ fn apply_local_rules(instructions: &[OwnedInstruction]) -> Vec<OwnedInstruction>
             }
         }
 
-        if let Some((consumed, replacement)) = stack_run_replacement(instructions, index, &facts) {
-            out.extend(replacement.into_iter().map(OwnedInstruction::Op));
-            index += consumed;
-            continue;
+        if index >= unchanged_stack_run_end {
+            if let Some(run) = stack_run_replacement(instructions, index, &facts) {
+                if let Some(replacement) = run.replacement {
+                    out.extend(replacement.into_iter().map(OwnedInstruction::Op));
+                    index += run.consumed;
+                    continue;
+                }
+                // The DP already considered every suffix. If one could shrink,
+                // unchanged prefix edges would propagate its saving to the
+                // whole run. Instructions and facts are immutable in this pass,
+                // so do not repeat that same search at the following indices.
+                // All other local rules still run there, and each new pass
+                // starts with a fresh boundary.
+                unchanged_stack_run_end = index + run.consumed;
+            }
         }
 
         if let Some(next) = instructions.get(index + 1) {
@@ -2072,11 +2084,16 @@ fn opcode_sequence_cmp(left: &[Opcode], right: &[Opcode]) -> std::cmp::Ordering 
         .cmp(right.iter().map(|opcode| opcode.to_u8()))
 }
 
+struct StackRunReplacement {
+    consumed: usize,
+    replacement: Option<Vec<Opcode>>,
+}
+
 fn stack_run_replacement(
     instructions: &[OwnedInstruction],
     start: usize,
     facts: &[PrefixFacts],
-) -> Option<(usize, Vec<Opcode>)> {
+) -> Option<StackRunReplacement> {
     const MAX_WINDOW: usize = 12;
     let mut run = Vec::new();
     for instruction in instructions.iter().skip(start) {
@@ -2136,7 +2153,15 @@ fn stack_run_replacement(
         replacement.extend(choice.emitted);
         offset += choice.consumed;
     }
-    (replacement.len() < run.len()).then_some((run.len(), replacement))
+    Some(StackRunReplacement {
+        consumed: run.len(),
+        replacement: (replacement.len() < run.len()).then_some(replacement),
+    })
+}
+
+#[cfg(test)]
+thread_local! {
+    static STACK_WINDOW_QUERIES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 fn stack_sequence_replacement(
@@ -2144,6 +2169,8 @@ fn stack_sequence_replacement(
     known_main: usize,
     known_alt: usize,
 ) -> Option<Vec<Opcode>> {
+    #[cfg(test)]
+    STACK_WINDOW_QUERIES.with(|queries| queries.set(queries.get() + 1));
     let tables = stack_rewrite_tables();
     let signature = stack_signature(sequence)?;
     let source_peak = stack_peak_growth(sequence)?;
@@ -2429,6 +2456,86 @@ mod tests {
             op(OP_EQUAL),
             op(OP_FROMALTSTACK),
         ]
+    }
+
+    fn assert_optimized_bytes(before: Vec<OwnedInstruction>, expected: Vec<OwnedInstruction>) {
+        assert_eq!(
+            assemble_script(&optimize_instructions(before)),
+            assemble_script(&expected),
+        );
+    }
+
+    #[test]
+    fn unchanged_stack_runs_preserve_exact_bytes() {
+        // Only TOALTSTACK grows the alt stack, by one item per instruction, so
+        // these transfer runs have no shorter fixed-stack representative.
+        let run = vec![op(OP_TOALTSTACK); 64];
+        assert_optimized_bytes(run.clone(), run.clone());
+
+        let separated = [run.clone(), vec![op(OP_SHA256)], run.clone()].concat();
+        assert_optimized_bytes(separated.clone(), separated);
+
+        let separated = [run.clone(), vec![op(OP_VERIFY), op(OP_DROP), op(OP_DROP)]].concat();
+        let expected = [run, vec![op(OP_VERIFY), op(OP_2DROP)]].concat();
+        assert_optimized_bytes(separated, expected);
+    }
+
+    #[test]
+    fn unchanged_stack_run_cache_keeps_profitable_suffixes() {
+        let mut original = vec![op(OP_TOALTSTACK); 64];
+        original.extend([op(OP_DROP), op(OP_DROP)]);
+        let mut expected = vec![op(OP_TOALTSTACK); 64];
+        expected.push(op(OP_2DROP));
+        assert_optimized_bytes(original, expected);
+    }
+
+    #[test]
+    fn unchanged_stack_run_cache_keeps_other_local_rules() {
+        let mut original = vec![op(OP_TOALTSTACK); 64];
+        original.extend([op(OP_DUP), op(OP_SHA256), op(OP_SWAP), op(OP_SHA256)]);
+        let mut expected = vec![op(OP_TOALTSTACK); 64];
+        expected.extend([op(OP_SHA256), op(OP_DUP)]);
+        // The first run, including DUP, cannot shrink via fixed-stack DP.
+        // At DUP, the later hash-pipeline rule must still inspect across the
+        // run boundary and rewrite DUP SHA256 SWAP SHA256 to SHA256 DUP.
+        assert_optimized_bytes(original, expected);
+    }
+
+    #[test]
+    fn unchanged_stack_runs_query_each_window_once_per_pass() {
+        for len in [64, 128, 256, 512] {
+            let original = vec![op(OP_TOALTSTACK); len];
+            STACK_WINDOW_QUERIES.with(|queries| queries.set(0));
+            let actual = apply_local_rules(&original);
+            assert_eq!(actual, original);
+            // One DP solve considers lengths 2..=12 at every start position:
+            // 11 * len - (1 + ... + 11) windows when len >= 12.
+            assert_eq!(
+                STACK_WINDOW_QUERIES.with(|queries| queries.get()),
+                11 * len - 66
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "bounded warmed optimizer benchmark; run explicitly in release mode"]
+    fn benchmark_unchanged_stack_runs() {
+        // Exclude the OnceLock table construction from the timing. Keep byte
+        // equality as the assertion; elapsed times are diagnostic only.
+        let _ = stack_rewrite_tables();
+        println!("run_ops,window_queries,elapsed_us");
+        for len in [64, 128, 256, 512] {
+            let original = vec![op(OP_TOALTSTACK); len];
+            STACK_WINDOW_QUERIES.with(|queries| queries.set(0));
+            let started = std::time::Instant::now();
+            let actual = apply_local_rules(&original);
+            let elapsed = started.elapsed().as_micros();
+            assert_eq!(assemble_script(&actual), assemble_script(&original));
+            println!(
+                "{len},{},{elapsed}",
+                STACK_WINDOW_QUERIES.with(|queries| queries.get())
+            );
+        }
     }
 
     #[test]
