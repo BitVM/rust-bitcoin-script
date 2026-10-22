@@ -20,4 +20,5 @@ stdext = "0.3.3"
 serde = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
+bitcoin-scriptexec = { git = "https://github.com/BitVM/rust-bitcoin-scriptexec", rev = "b24608bff855ea8932ae236c7a04f13f730ab9f8" }
 bincode = "1.3.3"

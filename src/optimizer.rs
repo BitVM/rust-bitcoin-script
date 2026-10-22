@@ -1310,11 +1310,15 @@ fn smarter_window_replacement(
         (instructions.get(index + 1), instructions.get(index + 2))
     {
         if duplicate.is_op(OP_DUP) {
-            if *binary == OP_EQUAL {
-                return Some((3, vec![push_script_num(1)]));
-            }
-            if *binary == OP_EQUALVERIFY {
-                return Some((3, Vec::new()));
+            // Only a literal can be discarded with the duplicated value.
+            // An opcode may consume other stack items or fail at runtime.
+            if current.pushed_bytes().is_some() {
+                if *binary == OP_EQUAL {
+                    return Some((3, vec![push_script_num(1)]));
+                }
+                if *binary == OP_EQUALVERIFY {
+                    return Some((3, Vec::new()));
+                }
             }
             if let Some(number) = current.push_num() {
                 if *binary == OP_NUMEQUALVERIFY {
